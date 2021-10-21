@@ -1,7 +1,7 @@
 {
   "name": "clipboard-sync",
   "productName": "clipboard-sync",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "My Electron application description",
   "main": "src/index.js",
   "scripts": {
@@ -45,7 +45,11 @@
     }
   },
   "dependencies": {
-    "electron-squirrel-startup": "^1.0.0"
+    "chokidar": "^3.5.2",
+    "clipboard-event": "^1.5.0",
+    "clipboardy": "^2.3.0",
+    "electron-squirrel-startup": "^1.0.0",
+    "electron-store": "^8.0.1"
   },
   "devDependencies": {
     "@electron-forge/cli": "^6.0.0-beta.61",
