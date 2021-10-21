@@ -260,6 +260,16 @@ const createAppIcon = () => {
       click: handleCleanupCheckBox,
     },
     { type: "separator" },
+    {
+      label: "Auto-start",
+      type: "checkbox",
+      checked: app.getLoginItemSettings().openAtLogin,
+      click: (checkBox) => {
+        app.setLoginItemSettings({
+          openAtLogin: checkBox.checked,
+        });
+      },
+    },
     { label: "Change folder", type: "normal", click: askForFolder },
     {
       label: "Open folder",
