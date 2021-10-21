@@ -1,14 +1,14 @@
 const { app, Tray, Menu, dialog, shell } = require("electron");
-const path = require("path");
 const Store = require("electron-store");
 const clipboardListener = require("clipboard-event");
 const clipboard = require("clipboardy");
 const chokidar = require("chokidar");
+const path = require("path");
 const fs = require("fs");
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
+// eslint-disable-line global-require
 if (require("electron-squirrel-startup")) {
-  // eslint-disable-line global-require
   app.quit();
 }
 
@@ -28,14 +28,20 @@ let excludeFilesWatcher = null;
 
 let iconWaiter = null;
 
+const getTrayIcon = (icon) => {
+  const iconExtension = process.platform === 'win32' ? 'ico' : 'png'
+
+  return path.resolve(__dirname, `../assets/trayicons/${iconExtension}/${icon}.${iconExtension}`);
+}
+
 const setIconFor5Seconds = (icon) => {
-  appIcon.setImage(path.resolve(__dirname, `../res/${icon}.png`));
+  appIcon.setImage(getTrayIcon(icon));
 
   if (iconWaiter) {
     clearTimeout(iconWaiter);
   }
   iconWaiter = setTimeout(() => {
-    appIcon.setImage(path.resolve(__dirname, "../res/clipboard.png"));
+    appIcon.setImage(getTrayIcon('clipboard'));
   }, 5000);
 };
 
@@ -239,7 +245,7 @@ const handleCleanupCheckBox = (checkBox) => {
 };
 
 const createAppIcon = () => {
-  appIcon = new Tray(path.resolve(__dirname, "../res/clipboard.png"));
+  appIcon = new Tray(getTrayIcon('clipboard'));
   const contextMenu = Menu.buildFromTemplate([
     {
       label: "Send",
