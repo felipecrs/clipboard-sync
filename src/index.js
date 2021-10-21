@@ -9,7 +9,7 @@ const fs = require("fs");
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // eslint-disable-line global-require
 if (require("electron-squirrel-startup")) {
-  app.quit();
+  app.exit();
 }
 
 let appIcon = null;
