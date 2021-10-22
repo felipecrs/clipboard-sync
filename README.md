@@ -12,6 +12,18 @@ Download the [latest release](https://github.com/felipecrs/clipboard-sync/releas
 
 When running for the first time, the tool will ask you which folder to use for synchronizing the clipboard. Select the same shared folder between your computers in both of them.
 
+## How it works
+
+It could not be simpler:
+
+When a new text is detected in your clipboard, the tool will create a file in the folder which you selected with the clipboard contents.
+
+When a new file is detected in the same folder, the tool will read its contents and write it to the clipboard.
+
+Some safeguards are implemented to prevent infinite loops and unneeded operations.
+
+Also, it deletes the files created when they become 5 minutes old.
+
 ## Tips
 
 ### Configuring the folder on OneDrive
@@ -35,6 +47,8 @@ Yes!
 The Clipboard Sync should be as fast (and as slow) as your folder synchronization tool. OneDrive takes some seconds to do its job, and in order to help you handle it, you can watch the Clipboard System tray icon:
 
 ![Sending and receiving icon](https://user-images.githubusercontent.com/29582865/138508741-2b5fe84b-ab3d-446b-97fa-4c25907479d0.gif)
+
+
 
 ## References
 
