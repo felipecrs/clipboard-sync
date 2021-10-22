@@ -1,7 +1,10 @@
+<img align="left" width="100" height="100" src="./assets/appicons/png/icon.png">
 
 # Clipboard Sync
 
-A simple tool which helps to sync the clipboard between computers by using a shared folder. In other words, if you have a shared folder between your computers (including OneDrive and other folder synchronization tools), this tool helps you sync your clipboard by leveraging it.
+A simple tool which helps to sync the clipboard between computers by using a shared folder.
+
+In other words, if you have a shared folder between your computers (including OneDrive and other folder synchronization tools), this tool helps you sync your clipboard by leveraging it.
 
 ## Get Started
 
@@ -24,7 +27,5 @@ If you are using Linux, you can use @abraunegg's non-official [OneDrive client f
 ## References
 
 This project is a continuation of <https://github.com/felipecrs/clipboard-sync-preview>.
-
-![Icon](./res/clipboard.png)
 
 Icons made by [Freepik](https://www.flaticon.com/authors/freepik) and [Flat Icons](https://www.flaticon.com/authors/flat-icons) from [www.flaticon.com](https://www.flaticon.com/).
