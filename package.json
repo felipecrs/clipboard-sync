@@ -25,7 +25,8 @@
     "clipboard-event": "^1.5.0",
     "clipboardy": "^2.3.0",
     "electron-squirrel-startup": "^1.0.0",
-    "electron-store": "^8.0.1"
+    "electron-store": "^8.0.1",
+    "node-cron": "^3.0.0"
   },
   "devDependencies": {
     "@electron-forge/cli": "^6.0.0-beta.61",

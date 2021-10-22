@@ -1,8 +1,8 @@
 const { app, Tray, Menu, dialog, shell } = require("electron");
 const Store = require("electron-store");
-const clipboardListener = require("clipboard-event");
 const clipboard = require("clipboardy");
 const chokidar = require("chokidar");
+const cron = require("node-cron");
 const path = require("path");
 const fs = require("fs");
 
@@ -23,29 +23,24 @@ let lastTimeWritten = "";
 let lastTextRead = "";
 let lastTimeRead = "";
 
+let clipboardListener = null;
 let clipboardFilesWatcher = null;
-let excludeFilesWatcher = null;
+let filesCleanerTask = null;
 
 let iconWaiter = null;
 
-const getTrayIcon = (icon) => {
-  const iconExtension = process.platform === 'win32' ? 'ico' : 'png'
-
-  return path.resolve(__dirname, `../assets/trayicons/${iconExtension}/${icon}.${iconExtension}`);
-}
-
-const setIconFor5Seconds = (icon) => {
-  appIcon.setImage(getTrayIcon(icon));
-
-  if (iconWaiter) {
-    clearTimeout(iconWaiter);
+const isValidFile = (file) => {
+  const parsedFile = path.parse(file);
+  if (
+    parsedFile.ext !== ".txt" ||
+    !fs.lstatSync(file).isFile() ||
+    !new Date(parseInt(parsedFile.name)).getTime() > 0
+  ) {
+    return false;
   }
-  iconWaiter = setTimeout(() => {
-    appIcon.setImage(getTrayIcon('clipboard'));
-  }, 5000);
+  return true;
 };
 
-// Writes clipboard to file
 const writeClipboardToFile = () => {
   let textToWrite = "";
   try {
@@ -77,18 +72,17 @@ const writeClipboardToFile = () => {
 };
 
 const readClipboardFromFile = (filePath) => {
-  const fileName = path.parse(filePath).name;
-
-  if (!new Date(parseInt("1243123123")).getTime() > 0) {
+  if (!isValidFile(filePath)) {
     return;
   }
+
+  const fileName = path.parse(filePath).name;
 
   let currentText = "";
   try {
     currentText = clipboard.readSync();
   } catch (error) {
-    console.error("Error reading current clipboard");
-    return;
+    currentText = "";
   }
 
   let newText = "";
@@ -124,6 +118,17 @@ const readClipboardFromFile = (filePath) => {
   clipboard.writeSync(newText);
 
   setIconFor5Seconds("clipboard_received");
+};
+
+const cleanFiles = () => {
+  const currentTimeMinus5Min = `${Date.now() - 300000}`;
+  fs.readdirSync(syncFolder).forEach((file) => {
+    const filePath = path.join(syncFolder, file);
+    const fileName = path.parse(file).name;
+    if (isValidFile(filePath) && fileName <= currentTimeMinus5Min) {
+      fs.unlinkSync(filePath);
+    }
+  });
 };
 
 const askForFolder = () => {
@@ -172,16 +177,17 @@ const initialize = () => {
   }
 
   if (store.get("send", true)) {
+    clipboardListener = require("clipboard-event");
     clipboardListener.startListening();
-
     clipboardListener.on("change", writeClipboardToFile);
   }
 
   if (store.get("receive", true)) {
     // Watches for files and reads clipboard from it
     clipboardFilesWatcher = chokidar
-      .watch(`${syncFolder}/*.txt`, {
+      .watch(syncFolder, {
         ignoreInitial: true,
+        disableGlobbing: true,
         depth: 1,
       })
       .on("add", readClipboardFromFile);
@@ -189,32 +195,27 @@ const initialize = () => {
 
   if (store.get("autoCleanup", true)) {
     // Remove files older than 5 minutes
-    excludeFilesWatcher = chokidar
-      .watch(`${syncFolder}/*.txt`, {
-        depth: 1,
-      })
-      .on("add", (filePath) => {
-        const currentTimeMinus5Min = `${Date.now() - 300000}`;
-        if (path.parse(filePath).name <= currentTimeMinus5Min) {
-          fs.unlinkSync(filePath);
-        }
-      });
+    cleanFiles();
+    filesCleanerTask = cron.schedule("*/5 * * * *", cleanFiles, {
+      scheduled: true,
+    });
   }
 };
 
 const cleanup = () => {
-  try {
+  if (clipboardListener) {
     clipboardListener.stopListening();
-  } catch (error) {
-    console.error("Error stopping clipboard listener");
+    clipboardListener = null;
   }
 
   if (clipboardFilesWatcher) {
     clipboardFilesWatcher.close();
+    clipboardFilesWatcher = null;
   }
 
-  if (excludeFilesWatcher) {
-    excludeFilesWatcher.close();
+  if (filesCleanerTask) {
+    filesCleanerTask.stop();
+    filesCleanerTask = null;
   }
 };
 
@@ -227,6 +228,26 @@ const reload = () => {
 const finish = (exitCode = 0) => {
   cleanup();
   app.exit(exitCode);
+};
+
+const getTrayIcon = (icon) => {
+  const iconExtension = process.platform === "win32" ? "ico" : "png";
+
+  return path.resolve(
+    __dirname,
+    `../assets/trayicons/${iconExtension}/${icon}.${iconExtension}`
+  );
+};
+
+const setIconFor5Seconds = (icon) => {
+  appIcon.setImage(getTrayIcon(icon));
+
+  if (iconWaiter) {
+    clearTimeout(iconWaiter);
+  }
+  iconWaiter = setTimeout(() => {
+    appIcon.setImage(getTrayIcon("clipboard"));
+  }, 5000);
 };
 
 const handleSendCheckBox = (checkBox) => {
@@ -245,7 +266,7 @@ const handleCleanupCheckBox = (checkBox) => {
 };
 
 const createAppIcon = () => {
-  appIcon = new Tray(getTrayIcon('clipboard'));
+  appIcon = new Tray(getTrayIcon("clipboard"));
   const contextMenu = Menu.buildFromTemplate([
     {
       label: "Send",
