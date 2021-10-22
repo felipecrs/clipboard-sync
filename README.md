@@ -14,15 +14,27 @@ When running for the first time, the tool will ask you which folder to use for s
 
 ## Tips
 
-Some tips depending on which folder synchronization tool that you are using.
-
-### OneDrive
+### Configuring the folder on OneDrive
 
 Make sure the _Always keep on this device_ option is enabled for the folder on both computers:
 
-![image](https://user-images.githubusercontent.com/29582865/138023653-c284670c-0019-42f9-9018-e98e138bf18f.png)
+![Always keep on this device OneDrive example](https://user-images.githubusercontent.com/29582865/138023653-c284670c-0019-42f9-9018-e98e138bf18f.png)
 
-If you are using Linux, you can use @abraunegg's non-official [OneDrive client for Linux](https://github.com/abraunegg/onedrive).
+### OneDrive for Linux?
+
+If you are using Linux, you can use the non-official [OneDrive client for Linux](https://github.com/abraunegg/onedrive).
+
+### Auto-start on boot?
+
+Yes!
+
+![Auto-start on boot example](https://user-images.githubusercontent.com/29582865/138464616-0cc2d14f-08f8-42f5-840c-8c217081be13.png)
+
+### Slow to sync
+
+The Clipboard Sync should be as fast (and as slow) as your folder synchronization tool. OneDrive takes some seconds to do its job, and in order to help you handle it, you can watch the Clipboard System tray icon:
+
+![Sending and receiving icon](https://user-images.githubusercontent.com/29582865/138508741-2b5fe84b-ab3d-446b-97fa-4c25907479d0.gif)
 
 ## References
 
