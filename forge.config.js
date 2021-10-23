@@ -1,10 +1,18 @@
 const path = require("path");
 
 const getAppIcon = () => {
-  const iconExtension = process.platform === 'win32' ? 'ico' : process.platform === 'darwin' ? 'icns' : 'png'
+  const iconExtension =
+    process.platform === "win32"
+      ? "ico"
+      : process.platform === "darwin"
+      ? "icns"
+      : "png";
 
-  return path.resolve(__dirname, `./assets/appicons/${iconExtension}/icon.${iconExtension}`);
-}
+  return path.resolve(
+    __dirname,
+    `./assets/appicons/${iconExtension}/icon.${iconExtension}`
+  );
+};
 
 module.exports = {
   packagerConfig: {
