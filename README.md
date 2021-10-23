@@ -12,6 +12,10 @@ Download the [latest release](https://github.com/felipecrs/clipboard-sync/releas
 
 When running for the first time, the tool will ask you which folder to use for synchronizing the clipboard. Select the same shared folder between your computers in both of them.
 
+## See it in action
+
+https://user-images.githubusercontent.com/29582865/138568560-011bb822-fb8a-4c18-930e-fc310e472a53.mp4
+
 ## How it works
 
 It could not be simpler:
