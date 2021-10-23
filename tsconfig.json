@@ -1,12 +1,10 @@
 {
-    "compilerOptions": {
-        "module": "CommonJS",
-        "outDir": "lib",
-        "sourceMap": true,
-        "target": "ES6",
-        "noImplicitAny": true
-    },
-    "include": [
-        "src"
-    ]
+  "compilerOptions": {
+    "module": "CommonJS",
+    "outDir": "lib",
+    "sourceMap": true,
+    "target": "ES6",
+    "noImplicitAny": true
+  },
+  "include": ["src"]
 }

@@ -259,10 +259,18 @@ const finish = (exitCode?: number) => {
 };
 
 const getAppIcon = () => {
-  const iconExtension = process.platform === 'win32' ? 'ico' : process.platform === 'darwin' ? 'icns' : 'png'
+  const iconExtension =
+    process.platform === "win32"
+      ? "ico"
+      : process.platform === "darwin"
+      ? "icns"
+      : "png";
 
-  return path.resolve(__dirname, `../assets/appicons/${iconExtension}/icon.${iconExtension}`);
-}
+  return path.resolve(
+    __dirname,
+    `../assets/appicons/${iconExtension}/icon.${iconExtension}`
+  );
+};
 
 const getTrayIcon = (icon: ClipboardIcon) => {
   const iconExtension = process.platform === "win32" ? "ico" : "png";
@@ -307,14 +315,14 @@ const createAppIcon = () => {
       type: "checkbox",
       checked: config.get("send", true),
       click: handleSendCheckBox,
-      toolTip: "Watch for new clipboards to send as files to the folder set"
+      toolTip: "Watch for new clipboards to send as files to the folder set",
     },
     {
       label: "Receive",
       type: "checkbox",
       checked: config.get("receive", true),
       click: handleReceiveCheckBox,
-      toolTip: "Watch for new files on the folder set to receive to clipboard"
+      toolTip: "Watch for new files on the folder set to receive to clipboard",
     },
     { type: "separator" },
     {
@@ -322,7 +330,7 @@ const createAppIcon = () => {
       type: "checkbox",
       checked: config.get("autoCleanup", true),
       click: handleCleanupCheckBox,
-      toolTip: `Auto-clean the files created by ${app.name} older than 5 minutes, on every 5 minutes`
+      toolTip: `Auto-clean the files created by ${app.name} older than 5 minutes, on every 5 minutes`,
     },
     {
       label: "Auto-start on login",
@@ -355,7 +363,8 @@ const createAppIcon = () => {
       click: () => {
         shell.openExternal("https://github.com/felipecrs/clipboard-sync");
       },
-      toolTip: "Open the GitHub page of the project. Please star it if you like it!",
+      toolTip:
+        "Open the GitHub page of the project. Please star it if you like it!",
     },
     { type: "separator" },
     {
@@ -383,17 +392,27 @@ const checkForUpdates = () => {
     },
     (response) => {
       const redirectedUrl = response.responseUrl;
-      const latestVersion = redirectedUrl.split("/").pop().replace(/^v/, '');
+      const latestVersion = redirectedUrl.split("/").pop().replace(/^v/, "");
       const currentVersion = app.getVersion();
       if (semver.gt(latestVersion, currentVersion)) {
-        new Notification({ title: "Update available", body: "Opening download page...", icon: getAppIcon()}).show();
+        new Notification({
+          title: "Update available",
+          body: "Opening download page...",
+          icon: getAppIcon(),
+        }).show();
         if (process.platform === "win32") {
-          shell.openExternal(`https://github.com/felipecrs/clipboard-sync/releases/download/v${latestVersion}/Clipboard.Sync-${latestVersion}.Setup.exe`);
+          shell.openExternal(
+            `https://github.com/felipecrs/clipboard-sync/releases/download/v${latestVersion}/Clipboard.Sync-${latestVersion}.Setup.exe`
+          );
         } else {
           shell.openExternal(redirectedUrl);
         }
       } else {
-        new Notification({ title: "No updates found", body: "You are running the latest version.", icon: getAppIcon()}).show();
+        new Notification({
+          title: "No updates found",
+          body: "You are running the latest version.",
+          icon: getAppIcon(),
+        }).show();
       }
     }
   );
