@@ -1,10 +1,12 @@
-const { app, Tray, Menu, dialog, shell } = require("electron");
-const Store = require("electron-store");
-const clipboard = require("clipboardy");
-const chokidar = require("chokidar");
-const cron = require("node-cron");
-const path = require("path");
-const fs = require("fs");
+import { app, Tray, Menu, dialog, shell, Notification } from "electron";
+import { https } from "follow-redirects";
+import Store = require("electron-store");
+import clipboard = require("clipboardy");
+import chokidar = require("chokidar");
+import cron = require("node-cron");
+import path = require("path");
+import fs = require("fs");
+import semver = require("semver");
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // eslint-disable-line global-require
@@ -12,29 +14,50 @@ if (require("electron-squirrel-startup")) {
   app.exit();
 }
 
-let appIcon = null;
-let store = new Store();
+type ConfigType = {
+  folder?: string;
+  send: boolean;
+  receive: boolean;
+  autoCleanup: boolean;
+};
 
-let syncFolder = null;
+type ClipboardListener = {
+  startListening: () => void;
+  on: (arg0: string, arg1: () => void) => void;
+  stopListening: () => void;
+};
 
-let lastTextWritten = "";
-let lastTimeWritten = "";
+type ClipboardIcon = "clipboard" | "clipboard_sent" | "clipboard_received";
 
-let lastTextRead = "";
-let lastTimeRead = "";
+const config = new Store<ConfigType>({
+  defaults: {
+    send: true,
+    receive: true,
+    autoCleanup: true,
+  },
+});
 
-let clipboardListener = null;
-let clipboardFilesWatcher = null;
-let filesCleanerTask = null;
+let appIcon: Tray = null;
 
-let iconWaiter = null;
+let syncFolder: string = null;
 
-const isValidFile = (file) => {
+let lastTextWritten: string = null;
+let lastTimeWritten: string = null;
+
+let lastTextRead: string = null;
+let lastTimeRead: string = null;
+
+let clipboardListener: ClipboardListener = null;
+let clipboardFilesWatcher: chokidar.FSWatcher = null;
+let filesCleanerTask: cron.ScheduledTask = null;
+let iconWaiter: NodeJS.Timeout = null;
+
+const isValidFile = (file: string) => {
   const parsedFile = path.parse(file);
   if (
     parsedFile.ext !== ".txt" ||
     !fs.lstatSync(file).isFile() ||
-    !new Date(parseInt(parsedFile.name)).getTime() > 0
+    !(new Date(parseInt(parsedFile.name)).getTime() > 0)
   ) {
     return false;
   }
@@ -42,13 +65,13 @@ const isValidFile = (file) => {
 };
 
 const writeClipboardToFile = () => {
-  let textToWrite = "";
+  let textToWrite: string = null;
   try {
     textToWrite = clipboard.readSync();
   } catch (error) {
     console.error("Error reading current clipboard");
-    return;
   }
+
   if (
     !textToWrite ||
     lastTextRead === textToWrite ||
@@ -71,23 +94,23 @@ const writeClipboardToFile = () => {
   setIconFor5Seconds("clipboard_sent");
 };
 
-const readClipboardFromFile = (filePath) => {
-  if (!isValidFile(filePath)) {
+const readClipboardFromFile = (file: string) => {
+  if (!isValidFile(file)) {
     return;
   }
 
-  const fileName = path.parse(filePath).name;
+  const fileName = path.parse(file).name;
 
-  let currentText = "";
+  let currentText: string;
   try {
     currentText = clipboard.readSync();
   } catch (error) {
     currentText = "";
   }
 
-  let newText = "";
+  let newText: string;
   try {
-    newText = fs.readFileSync(filePath, {
+    newText = fs.readFileSync(file, {
       encoding: "utf8",
     });
   } catch (error) {
@@ -114,7 +137,7 @@ const readClipboardFromFile = (filePath) => {
   lastTextRead = newText;
   lastTimeRead = currentFileTime;
 
-  console.log(`Reading clipboard from ${filePath}`);
+  console.log(`Reading clipboard from ${file}`);
   clipboard.writeSync(newText);
 
   setIconFor5Seconds("clipboard_received");
@@ -132,16 +155,17 @@ const cleanFiles = () => {
 };
 
 const askForFolder = () => {
-  const previousFolder = store.get("folder");
+  let previousFolder = config.get("folder");
 
-  let folderSelected = dialog.showOpenDialogSync({
+  const foldersSelected = dialog.showOpenDialogSync({
     title: "Select folder to save and read clipboard files",
     properties: ["openDirectory"],
     defaultPath: previousFolder,
   });
 
-  if (folderSelected) {
-    folderSelected = folderSelected[0];
+  let folderSelected;
+  if (foldersSelected) {
+    folderSelected = foldersSelected[0];
   }
 
   if (!folderSelected && !previousFolder) {
@@ -155,7 +179,7 @@ const askForFolder = () => {
     return;
   }
   syncFolder = folderSelected;
-  store.set("folder", folderSelected);
+  config.set("folder", folderSelected);
 
   if (folderSelected !== previousFolder) {
     reload();
@@ -163,7 +187,11 @@ const askForFolder = () => {
 };
 
 const initialize = () => {
-  syncFolder = store.get("folder");
+  syncFolder = config.get("folder");
+
+  if (!(typeof syncFolder === "string" || typeof syncFolder === "undefined")) {
+    return;
+  }
 
   if (
     !syncFolder ||
@@ -176,13 +204,13 @@ const initialize = () => {
     fs.mkdirSync(syncFolder);
   }
 
-  if (store.get("send", true)) {
+  if (config.get("send", true)) {
     clipboardListener = require("clipboard-event");
     clipboardListener.startListening();
     clipboardListener.on("change", writeClipboardToFile);
   }
 
-  if (store.get("receive", true)) {
+  if (config.get("receive", true)) {
     // Watches for files and reads clipboard from it
     clipboardFilesWatcher = chokidar
       .watch(syncFolder, {
@@ -193,7 +221,7 @@ const initialize = () => {
       .on("add", readClipboardFromFile);
   }
 
-  if (store.get("autoCleanup", true)) {
+  if (config.get("autoCleanup", true)) {
     // Remove files older than 5 minutes
     cleanFiles();
     filesCleanerTask = cron.schedule("*/5 * * * *", cleanFiles, {
@@ -225,12 +253,18 @@ const reload = () => {
   initialize();
 };
 
-const finish = (exitCode = 0) => {
+const finish = (exitCode?: number) => {
   cleanup();
-  app.exit(exitCode);
+  app.exit(exitCode !== undefined ? exitCode : 0);
 };
 
-const getTrayIcon = (icon) => {
+const getAppIcon = () => {
+  const iconExtension = process.platform === 'win32' ? 'ico' : process.platform === 'darwin' ? 'icns' : 'png'
+
+  return path.resolve(__dirname, `../assets/appicons/${iconExtension}/icon.${iconExtension}`);
+}
+
+const getTrayIcon = (icon: ClipboardIcon) => {
   const iconExtension = process.platform === "win32" ? "ico" : "png";
 
   return path.resolve(
@@ -239,7 +273,7 @@ const getTrayIcon = (icon) => {
   );
 };
 
-const setIconFor5Seconds = (icon) => {
+const setIconFor5Seconds = (icon: ClipboardIcon) => {
   appIcon.setImage(getTrayIcon(icon));
 
   if (iconWaiter) {
@@ -250,18 +284,18 @@ const setIconFor5Seconds = (icon) => {
   }, 5000);
 };
 
-const handleSendCheckBox = (checkBox) => {
-  store.set("send", checkBox.checked);
+const handleSendCheckBox = (checkBox: Electron.MenuItem) => {
+  config.set("send", checkBox.checked);
   reload();
 };
 
-const handleReceiveCheckBox = (checkBox) => {
-  store.set("receive", checkBox.checked);
+const handleReceiveCheckBox = (checkBox: Electron.MenuItem) => {
+  config.set("receive", checkBox.checked);
   reload();
 };
 
-const handleCleanupCheckBox = (checkBox) => {
-  store.set("autoCleanup", checkBox.checked);
+const handleCleanupCheckBox = (checkBox: Electron.MenuItem) => {
+  config.set("autoCleanup", checkBox.checked);
   reload();
 };
 
@@ -271,24 +305,27 @@ const createAppIcon = () => {
     {
       label: "Send",
       type: "checkbox",
-      checked: store.get("send", true),
+      checked: config.get("send", true),
       click: handleSendCheckBox,
+      toolTip: "Watch for new clipboards to send as files to the folder set"
     },
     {
       label: "Receive",
       type: "checkbox",
-      checked: store.get("receive", true),
+      checked: config.get("receive", true),
       click: handleReceiveCheckBox,
-    },
-    {
-      label: "Auto-clean",
-      type: "checkbox",
-      checked: store.get("autoCleanup", true),
-      click: handleCleanupCheckBox,
+      toolTip: "Watch for new files on the folder set to receive to clipboard"
     },
     { type: "separator" },
     {
-      label: "Auto-start",
+      label: "Auto-clean",
+      type: "checkbox",
+      checked: config.get("autoCleanup", true),
+      click: handleCleanupCheckBox,
+      toolTip: `Auto-clean the files created by ${app.name} older than 5 minutes, on every 5 minutes`
+    },
+    {
+      label: "Auto-start on login",
       type: "checkbox",
       checked: app.getLoginItemSettings().openAtLogin,
       click: (checkBox) => {
@@ -297,6 +334,7 @@ const createAppIcon = () => {
         });
       },
     },
+    { type: "separator" },
     { label: "Change folder", type: "normal", click: askForFolder },
     {
       label: "Open folder",
@@ -306,12 +344,60 @@ const createAppIcon = () => {
       },
     },
     { type: "separator" },
-    { label: "Exit", type: "normal", click: finish },
+    {
+      label: "Check for updates",
+      type: "normal",
+      click: checkForUpdates,
+    },
+    {
+      label: "GitHub",
+      type: "normal",
+      click: () => {
+        shell.openExternal("https://github.com/felipecrs/clipboard-sync");
+      },
+      toolTip: "Open the GitHub page of the project. Please star it if you like it!",
+    },
+    { type: "separator" },
+    {
+      label: "Exit",
+      type: "normal",
+      click: () => finish(),
+    },
   ]);
-  appIcon.setToolTip("Clipboard Sync");
+  appIcon.setToolTip(`${app.name} v${app.getVersion()}`);
   appIcon.setContextMenu(contextMenu);
 
+  // sets left click to open the context menu too
+  appIcon.on("click", () => {
+    appIcon.popUpContextMenu();
+  });
+
   initialize();
+};
+
+const checkForUpdates = () => {
+  const request = https.request(
+    {
+      hostname: "github.com",
+      path: "/felipecrs/clipboard-sync/releases/latest",
+    },
+    (response) => {
+      const redirectedUrl = response.responseUrl;
+      const latestVersion = redirectedUrl.split("/").pop().replace(/^v/, '');
+      const currentVersion = app.getVersion();
+      if (semver.gt(latestVersion, currentVersion)) {
+        new Notification({ title: "Update available", body: "Opening download page...", icon: getAppIcon()}).show();
+        if (process.platform === "win32") {
+          shell.openExternal(`https://github.com/felipecrs/clipboard-sync/releases/download/v${latestVersion}/Clipboard.Sync-${latestVersion}.Setup.exe`);
+        } else {
+          shell.openExternal(redirectedUrl);
+        }
+      } else {
+        new Notification({ title: "No updates found", body: "You are running the latest version.", icon: getAppIcon()}).show();
+      }
+    }
+  );
+  request.end();
 };
 
 // This method will be called when Electron has finished
