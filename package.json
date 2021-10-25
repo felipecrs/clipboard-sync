@@ -1,7 +1,7 @@
 {
   "name": "clipboard-sync",
   "productName": "Clipboard Sync",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "My Electron application description",
   "main": "lib/index.js",
   "scripts": {
@@ -20,10 +20,10 @@
   "config": {
     "forge": "./forge.config.js"
   },
+  "repository": "https://github.com/felipecrs/clipboard-sync.git",
   "dependencies": {
     "chokidar": "^3.5.2",
     "clipboard-event": "^1.5.0",
-    "clipboardy": "^2.3.0",
     "electron-squirrel-startup": "^1.0.0",
     "electron-store": "^8.0.1",
     "follow-redirects": "^1.14.4",
@@ -37,12 +37,12 @@
     "@electron-forge/maker-squirrel": "^6.0.0-beta.61",
     "@electron-forge/maker-zip": "^6.0.0-beta.61",
     "@types/follow-redirects": "^1.13.1",
+    "@types/node": "^14.17.29",
     "@types/node-cron": "^3.0.0",
     "@types/semver": "^7.3.9",
     "electron": "15.3.0",
     "typescript": "^4.4.4"
   },
-  "repository": "https://github.com/felipecrs/clipboard-sync.git",
   "volta": {
     "node": "14.18.1",
     "npm": "8.1.1"

@@ -6,6 +6,11 @@ A simple tool which helps to sync the clipboard between computers by using a sha
 
 In other words, if you have a shared folder between your computers (including OneDrive and other folder synchronization tools), this tool helps you sync your clipboard by leveraging it.
 
+Currently supports the following formats in the clipboard:
+
+- `text`
+- `image`
+
 ## Get Started
 
 Download the [latest release](https://github.com/felipecrs/clipboard-sync/releases/latest) for your platform and open it.
@@ -51,8 +56,6 @@ Yes!
 The Clipboard Sync should be as fast (and as slow) as your folder synchronization tool. OneDrive takes some seconds to do its job, and in order to help you handle it, you can watch the Clipboard System tray icon:
 
 ![Sending and receiving icon](https://user-images.githubusercontent.com/29582865/138508741-2b5fe84b-ab3d-446b-97fa-4c25907479d0.gif)
-
-
 
 ## References
 
