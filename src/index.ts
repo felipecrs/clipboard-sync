@@ -489,9 +489,8 @@ const checkForUpdates = () => {
           shell.openExternal(
             `https://github.com/felipecrs/clipboard-sync/releases/download/v${latestVersion}/Clipboard.Sync-${latestVersion}.Setup.exe`
           );
-        } else {
-          shell.openExternal(redirectedUrl);
         }
+        shell.openExternal(redirectedUrl);
       } else {
         new Notification({
           title: "No updates found",
