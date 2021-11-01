@@ -10,6 +10,7 @@ Currently supports the following formats in the clipboard:
 
 - `text`
 - `image`
+- `files`
 
 ## Get Started
 
