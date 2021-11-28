@@ -135,18 +135,14 @@ const writeClipboardToFile = () => {
 
   if (
     clipboardType === "text" &&
-    (!clipboardText ||
-      lastTextRead === clipboardText ||
-      lastTextWritten === clipboardText)
+    (!clipboardText || lastTextRead === clipboardText)
   ) {
     return;
   }
 
   if (
     clipboardType === "image" &&
-    (!clipboardImage ||
-      lastImageSha256Read === clipboardImageSha256 ||
-      lastImageSha256Written === clipboardImageSha256)
+    (!clipboardImage || lastImageSha256Read === clipboardImageSha256)
   ) {
     return;
   }
@@ -154,8 +150,7 @@ const writeClipboardToFile = () => {
   if (
     clipboardType === "files" &&
     (!clipboardFilePaths ||
-      isArrayEquals(lastClipboardFilePathsRead, clipboardFilePaths) ||
-      isArrayEquals(lastClipboardFilePathsWritten, clipboardFilePaths))
+      isArrayEquals(lastClipboardFilePathsRead, clipboardFilePaths))
   ) {
     return;
   }
