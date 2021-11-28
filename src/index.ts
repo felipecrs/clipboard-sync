@@ -77,6 +77,23 @@ const isArrayEquals = (arr1?: any[], arr2?: any[]) => {
   );
 };
 
+// https://stackoverflow.com/a/32197381/12156188
+const deleteFolderRecursive = (directoryPath: string) => {
+  if (fs.existsSync(directoryPath)) {
+    fs.readdirSync(directoryPath).forEach((file, index) => {
+      const curPath = path.join(directoryPath, file);
+      if (fs.lstatSync(curPath).isDirectory()) {
+        // recurse
+        deleteFolderRecursive(curPath);
+      } else {
+        // delete file
+        fs.unlinkSync(curPath);
+      }
+    });
+    fs.rmdirSync(directoryPath);
+  }
+};
+
 const isValidClipboardArtifact = (file: string) => {
   const parsedFile = path.parse(file);
   let valid = false;
@@ -268,23 +285,26 @@ const readClipboardFromFile = (file: string) => {
     return;
   }
 
-  if (fileClipboardType === "text" && (!newText || currentText === newText)) {
-    // Prevents writing duplicated text to clipboard
-    return;
-  } else if (
-    fileClipboardType === "image" &&
-    (!newImage || currentImageSha256 === newImageSha256)
-  ) {
-    // Prevents writing duplicated image to clipboard
-    return;
-  } else if (
-    fileClipboardType === "files" &&
-    (!newFilePaths ||
-      isArrayEquals(lastClipboardFilePathsRead, newFilePaths) ||
-      isArrayEquals(lastClipboardFilePathsWritten, newFilePaths))
-  ) {
-    // Prevents writing duplicated files to clipboard
-    return;
+  if (currentClipboardType === fileClipboardType) {
+    if (
+      currentClipboardType === "text" &&
+      (!newText || currentText === newText)
+    ) {
+      // Prevents writing duplicated text to clipboard
+      return;
+    } else if (
+      fileClipboardType === "image" &&
+      (!newImage || currentImageSha256 === newImageSha256)
+    ) {
+      // Prevents writing duplicated image to clipboard
+      return;
+    } else if (
+      fileClipboardType === "files" &&
+      (!newFilePaths || isArrayEquals(currentFilePaths, newFilePaths))
+    ) {
+      // Prevents writing duplicated files to clipboard
+      return;
+    }
   }
 
   const currentFileTime = fileName;
@@ -324,7 +344,7 @@ const cleanFiles = () => {
       fileName <= currentTimeMinus5Min
     ) {
       if (fs.statSync(filePath).isDirectory()) {
-        fs.rmdirSync(filePath);
+        deleteFolderRecursive(filePath);
       } else {
         fs.unlinkSync(filePath);
       }
