@@ -328,9 +328,11 @@ const cleanFiles = () => {
       isValidClipboardArtifact(filePath) &&
       fileName <= currentTimeMinus5Min
     ) {
-      fs.rmSync(filePath, {
-        recursive: true,
-      });
+      if (fs.statSync(filePath).isDirectory()) {
+        fs.rmdirSync(filePath);
+      } else {
+        fs.unlinkSync(filePath);
+      }
     }
   });
 };
