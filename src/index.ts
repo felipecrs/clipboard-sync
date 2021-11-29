@@ -17,11 +17,20 @@ import cron = require("node-cron");
 import path = require("path");
 import fs = require("fs");
 import semver = require("semver");
+import { exit } from "process";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // eslint-disable-line global-require
 if (require("electron-squirrel-startup")) {
   app.exit();
+}
+
+let appIcon: Tray = null;
+
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  exit();
 }
 
 type ConfigType = {
@@ -48,8 +57,6 @@ const config = new Store<ConfigType>({
     autoCleanup: true,
   },
 });
-
-let appIcon: Tray = null;
 
 let syncFolder: string = null;
 
@@ -457,9 +464,9 @@ const reload = () => {
   initialize();
 };
 
-const finish = (exitCode?: number) => {
+const finish = (exitCode: number = 0) => {
   cleanup();
-  app.exit(exitCode !== undefined ? exitCode : 0);
+  app.exit(exitCode);
 };
 
 const getAppIcon = () => {
