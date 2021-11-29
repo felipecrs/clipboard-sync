@@ -10,7 +10,7 @@ Currently supports the following formats in the clipboard:
 
 - `text`
 - `image`
-- `files`
+- `files` (max of 100MB)
 
 ## Get Started
 

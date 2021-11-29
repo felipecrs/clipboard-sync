@@ -89,6 +89,46 @@ const isArrayEquals = (arr1?: any[], arr2?: any[]) => {
   );
 };
 
+const iterateThroughFilesRecursively = (
+  paths: string[],
+  fn: (arg0: string) => unknown
+): unknown[] => {
+  const results: unknown[] = [];
+  paths.forEach((fileOrFolder) => {
+    if (fs.existsSync(fileOrFolder)) {
+      if (fs.statSync(fileOrFolder).isDirectory()) {
+        fs.readdirSync(fileOrFolder).forEach((file) => {
+          const filePath = path.join(fileOrFolder, file);
+          iterateThroughFilesRecursively([filePath], fn).forEach((result) => {
+            if (result) {
+              results.push(result);
+            }
+          });
+        });
+      } else {
+        const result = fn(fileOrFolder);
+        if (result) {
+          results.push(result);
+        }
+      }
+    }
+  });
+  return results;
+};
+
+const getFilesSizeInMb = (paths: string[]) => {
+  let totalSize = 0;
+  iterateThroughFilesRecursively(paths, (file) => {
+    return fs.lstatSync(file).size / (1024 * 1024);
+  }).forEach((size) => {
+    if (typeof size === "number") {
+      totalSize += size;
+    }
+  });
+
+  return totalSize;
+};
+
 // https://stackoverflow.com/a/32197381/12156188
 const deleteFolderRecursive = (directoryPath: string) => {
   if (fs.existsSync(directoryPath)) {
@@ -209,7 +249,8 @@ const writeClipboardToFile = () => {
   if (
     clipboardType === "files" &&
     (!clipboardFilePaths ||
-      isArrayEquals(lastClipboardFilePathsRead, clipboardFilePaths))
+      isArrayEquals(lastClipboardFilePathsRead, clipboardFilePaths) ||
+      getFilesSizeInMb(clipboardFilePaths) > 100)
   ) {
     return;
   }
