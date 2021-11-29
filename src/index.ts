@@ -68,12 +68,12 @@ let syncFolder: string = null;
 let lastTextWritten: string = null;
 let lastImageSha256Written: string = null;
 let lastClipboardFilePathsWritten: string[] = null;
-let lastTimeWritten: string = null;
+let lastTimeWritten: number = null;
 
 let lastTextRead: string = null;
 let lastImageSha256Read: string = null;
 let lastClipboardFilePathsRead: string[] = null;
-let lastTimeRead: string = null;
+let lastTimeRead: number = null;
 
 let clipboardListener: ClipboardListener = null;
 let clipboardFilesWatcher: watcher.AsyncSubscription = null;
@@ -117,7 +117,7 @@ const getRedirectedUrl = async (requestOptions: RequestOptions) => {
   )(requestOptions);
 };
 
-const isValidClipboardArtifact = (file: string) => {
+const getItemNumber = (file: string) => {
   const parsedFile = path.parse(file);
   let valid = false;
   if (
@@ -132,15 +132,34 @@ const isValidClipboardArtifact = (file: string) => {
     valid = true;
   }
 
-  if (valid && new Date(parseInt(parsedFile.name)).getTime() > 0) {
+  const itemNumber = parseInt(parsedFile.name);
+  if (valid && itemNumber > 0) {
     valid = true;
   }
 
+  if (valid) {
+    return itemNumber;
+  }
   return valid;
 };
 
 const calculateSha256 = (data: Buffer) => {
   return createHash("sha256").update(data).digest("hex");
+};
+
+const getNextWriteTime = () => {
+  const numbers: number[] = [];
+  fs.readdirSync(syncFolder).forEach((file) => {
+    file = path.join(syncFolder, file);
+    const itemNumber = getItemNumber(file);
+    if (typeof itemNumber === "number") {
+      numbers.push(itemNumber);
+    }
+  });
+  if (numbers.length > 0) {
+    return numbers.sort().at(-1) + 1;
+  }
+  return 1;
 };
 
 const writeClipboardToFile = () => {
@@ -195,7 +214,7 @@ const writeClipboardToFile = () => {
     return;
   }
 
-  const writeTime = `${Date.now()}`;
+  const writeTime = getNextWriteTime();
   let destinationPath: string;
   if (clipboardType === "text") {
     destinationPath = path.join(syncFolder, `${writeTime}.txt`);
@@ -231,7 +250,8 @@ const readClipboardFromFile = (file: string) => {
   const filename = path.relative(syncFolder, file).split(path.sep)[0];
   file = path.join(syncFolder, filename);
 
-  if (!isValidClipboardArtifact(file)) {
+  const currentFileTime = getItemNumber(file);
+  if (typeof currentFileTime !== "number") {
     return;
   }
 
@@ -330,7 +350,6 @@ const readClipboardFromFile = (file: string) => {
     }
   }
 
-  const currentFileTime = fileName;
   // Skips the read if a newer file was already wrote
   if (lastTimeWritten && currentFileTime <= lastTimeWritten) {
     return;
@@ -358,18 +377,17 @@ const readClipboardFromFile = (file: string) => {
 };
 
 const cleanFiles = () => {
-  const currentTimeMinus5Min = `${Date.now() - 300000}`;
+  const currentTimeMinus5Min = Date.now() - 300000;
   fs.readdirSync(syncFolder).forEach((file) => {
     const filePath = path.join(syncFolder, file);
-    const fileName = path.parse(file).name;
-    if (
-      isValidClipboardArtifact(filePath) &&
-      fileName <= currentTimeMinus5Min
-    ) {
-      if (fs.statSync(filePath).isDirectory()) {
-        deleteFolderRecursive(filePath);
-      } else {
-        fs.unlinkSync(filePath);
+    if (getItemNumber(filePath)) {
+      const fileStat = fs.statSync(filePath);
+      if (fileStat.ctime.getTime() <= currentTimeMinus5Min) {
+        if (fileStat.isDirectory()) {
+          deleteFolderRecursive(filePath);
+        } else {
+          fs.unlinkSync(filePath);
+        }
       }
     }
   });
