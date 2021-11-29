@@ -7,6 +7,7 @@ import {
   Notification,
   clipboard,
   nativeImage,
+  MenuItem,
 } from "electron";
 import clipboardEx = require("electron-clipboard-ex");
 import { createHash } from "crypto";
@@ -18,14 +19,14 @@ import path = require("path");
 import fs = require("fs");
 import semver = require("semver");
 import { exit } from "process";
+import { promisify } from "util";
+import { RequestOptions } from "https";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // eslint-disable-line global-require
 if (require("electron-squirrel-startup")) {
   app.exit();
 }
-
-let appIcon: Tray = null;
 
 const gotTheLock = app.requestSingleInstanceLock();
 
@@ -57,6 +58,10 @@ const config = new Store<ConfigType>({
     autoCleanup: true,
   },
 });
+
+let appIcon: Tray = null;
+let contextMenu: Menu = null;
+let firstTime = true;
 
 let syncFolder: string = null;
 
@@ -99,6 +104,17 @@ const deleteFolderRecursive = (directoryPath: string) => {
     });
     fs.rmdirSync(directoryPath);
   }
+};
+
+const getRedirectedUrl = async (requestOptions: RequestOptions) => {
+  return await promisify(
+    (requestOptions: RequestOptions, callback: Function) => {
+      const request = https.request(requestOptions, (response) => {
+        callback(null, response.responseUrl);
+      });
+      request.end();
+    }
+  )(requestOptions);
 };
 
 const isValidClipboardArtifact = (file: string) => {
@@ -518,9 +534,72 @@ const handleCleanupCheckBox = (checkBox: Electron.MenuItem) => {
   reload();
 };
 
-const createAppIcon = () => {
-  appIcon = new Tray(getTrayIcon("clipboard"));
-  const contextMenu = Menu.buildFromTemplate([
+let updateLabel = "Check for updates";
+
+const isUpdateAvailable = async () => {
+  let available = false;
+
+  const newVersionUrl = await getRedirectedUrl({
+    hostname: "github.com",
+    path: "/felipecrs/clipboard-sync/releases/latest",
+  });
+  if (typeof newVersionUrl !== "string") {
+    console.error(`Could not get latest version from GitHub.`);
+    return false;
+  }
+  const newVersion = newVersionUrl.split("/").pop().replace(/^v/, "");
+  const currentVersion = app.getVersion();
+  if (semver.gt(newVersion, currentVersion)) {
+    available = true;
+  }
+
+  if (available) {
+    updateLabel = "Download update";
+    setContextMenu();
+    return {
+      newVersion,
+      newVersionUrl,
+    };
+  }
+  return false;
+};
+
+const checkForUpdatesPress = async () => {
+  const update = await isUpdateAvailable();
+  if (update) {
+    new Notification({
+      title: "Update available",
+      body: "Opening download page...",
+      icon: getAppIcon(),
+    }).show();
+    if (process.platform === "win32") {
+      shell.openExternal(
+        `https://github.com/felipecrs/clipboard-sync/releases/download/v${update.newVersion}/Clipboard.Sync-${update.newVersion}.Setup.exe`
+      );
+    }
+    shell.openExternal(update.newVersionUrl);
+  } else {
+    new Notification({
+      title: "No updates found",
+      body: "You are already running the latest version.",
+      icon: getAppIcon(),
+    }).show();
+  }
+};
+
+const autoCheckForUpdates = async () => {
+  const update = await isUpdateAvailable();
+  if (update) {
+    new Notification({
+      title: "Update available",
+      body: "Click in the tray icon to download.",
+      icon: getAppIcon(),
+    }).show();
+  }
+};
+
+const setContextMenu = () => {
+  const menu = Menu.buildFromTemplate([
     {
       label: "Send",
       type: "checkbox",
@@ -547,7 +626,7 @@ const createAppIcon = () => {
       label: "Auto-start on login",
       type: "checkbox",
       checked: app.getLoginItemSettings().openAtLogin,
-      click: (checkBox) => {
+      click: (checkBox: Electron.MenuItem) => {
         app.setLoginItemSettings({
           openAtLogin: checkBox.checked,
         });
@@ -564,9 +643,9 @@ const createAppIcon = () => {
     },
     { type: "separator" },
     {
-      label: "Check for updates",
+      label: updateLabel,
       type: "normal",
-      click: checkForUpdates,
+      click: checkForUpdatesPress,
     },
     {
       label: "GitHub",
@@ -584,8 +663,13 @@ const createAppIcon = () => {
       click: () => finish(),
     },
   ]);
+  appIcon.setContextMenu(menu);
+};
+
+const createAppIcon = () => {
+  appIcon = new Tray(getTrayIcon("clipboard"));
+  setContextMenu();
   appIcon.setToolTip(`${app.name} v${app.getVersion()}`);
-  appIcon.setContextMenu(contextMenu);
 
   // sets left click to open the context menu too
   appIcon.on("click", () => {
@@ -593,40 +677,11 @@ const createAppIcon = () => {
   });
 
   initialize();
-};
 
-const checkForUpdates = () => {
-  const request = https.request(
-    {
-      hostname: "github.com",
-      path: "/felipecrs/clipboard-sync/releases/latest",
-    },
-    (response) => {
-      const redirectedUrl = response.responseUrl;
-      const latestVersion = redirectedUrl.split("/").pop().replace(/^v/, "");
-      const currentVersion = app.getVersion();
-      if (semver.gt(latestVersion, currentVersion)) {
-        new Notification({
-          title: "Update available",
-          body: "Opening download page...",
-          icon: getAppIcon(),
-        }).show();
-        if (process.platform === "win32") {
-          shell.openExternal(
-            `https://github.com/felipecrs/clipboard-sync/releases/download/v${latestVersion}/Clipboard.Sync-${latestVersion}.Setup.exe`
-          );
-        }
-        shell.openExternal(redirectedUrl);
-      } else {
-        new Notification({
-          title: "No updates found",
-          body: "You are running the latest version.",
-          icon: getAppIcon(),
-        }).show();
-      }
-    }
-  );
-  request.end();
+  if (firstTime) {
+    firstTime = false;
+    autoCheckForUpdates();
+  }
 };
 
 // This method will be called when Electron has finished
