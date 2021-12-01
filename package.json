@@ -1,7 +1,7 @@
 {
   "name": "clipboard-sync",
   "productName": "Clipboard Sync",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "My Electron application description",
   "main": "lib/index.js",
   "scripts": {
