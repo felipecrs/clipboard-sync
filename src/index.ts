@@ -197,7 +197,14 @@ const getNextWriteTime = () => {
     }
   });
   if (numbers.length > 0) {
-    return numbers.sort().at(-1) + 1;
+    // https://stackoverflow.com/a/1063027/12156188
+    return (
+      numbers
+        .sort((a, b) => {
+          return a - b;
+        })
+        .at(-1) + 1
+    );
   }
   return 1;
 };
