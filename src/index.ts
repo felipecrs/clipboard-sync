@@ -157,30 +157,32 @@ const getRedirectedUrl = async (requestOptions: RequestOptions) => {
   )(requestOptions);
 };
 
+// returns 0 if not valid
 const getItemNumber = (file: string) => {
   const parsedFile = path.parse(file);
-  let valid = false;
-  if (
-    (parsedFile.ext === ".txt" || parsedFile.ext === ".png") &&
-    fs.lstatSync(file).isFile()
-  ) {
-    valid = true;
-  } else if (
-    /^[0-9]+\.[0-9]+_files$/.test(parsedFile.base) &&
-    fs.lstatSync(file).isDirectory()
-  ) {
-    valid = true;
-  }
+  let itemNumber = 0;
+  let fileStat;
 
-  const itemNumber = parseInt(parsedFile.name);
-  if (valid && itemNumber > 0) {
-    valid = true;
-  }
-
-  if (valid) {
+  try {
+    fileStat = fs.lstatSync(file);
+  } catch (error) {
     return itemNumber;
   }
-  return valid;
+
+  if (fileStat.isDirectory()) {
+    const match = parsedFile.base.match(
+      /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)_files$/
+    );
+    if (match) {
+      itemNumber = parseInt(match[1]);
+    }
+  } else {
+    const match = parsedFile.base.match(/^(0|[1-9][0-9]*)\.(txt|png)$/);
+    if (match) {
+      itemNumber = parseInt(match[1]);
+    }
+  }
+  return itemNumber;
 };
 
 const calculateSha256 = (data: Buffer) => {
@@ -192,7 +194,7 @@ const getNextWriteTime = () => {
   fs.readdirSync(syncFolder).forEach((file) => {
     file = path.join(syncFolder, file);
     const itemNumber = getItemNumber(file);
-    if (typeof itemNumber === "number") {
+    if (itemNumber) {
       numbers.push(itemNumber);
     }
   });
@@ -214,7 +216,7 @@ const isThereAnyClipboardFile = () => {
   fs.readdirSync(syncFolder).forEach((file) => {
     file = path.join(syncFolder, file);
     const itemNumber = getItemNumber(file);
-    if (typeof itemNumber === "number") {
+    if (itemNumber) {
       found = true;
       return;
     }
@@ -332,7 +334,7 @@ const readClipboardFromFile = (file: string) => {
   file = path.join(syncFolder, filename);
 
   const currentFileTime = getItemNumber(file);
-  if (typeof currentFileTime !== "number") {
+  if (!currentFileTime) {
     return;
   }
 
