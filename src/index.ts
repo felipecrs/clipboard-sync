@@ -228,17 +228,19 @@ const getNextWriteTime = () => {
   return 1;
 };
 
-const isThereAnyClipboardFile = () => {
-  let found = false;
+const isThereMoreThanOneClipboardFile = () => {
+  let found = 0;
   fs.readdirSync(syncFolder).forEach((file) => {
     file = path.join(syncFolder, file);
     const itemNumber = getItemNumber(file);
     if (itemNumber) {
-      found = true;
-      return;
+      found++;
+      if (found > 1) {
+        return;
+      }
     }
   });
-  return found;
+  return found > 1;
 };
 
 let lastTimeChecked: number = null;
@@ -457,7 +459,7 @@ const readClipboardFromFile = (file: string) => {
 
   // Skips the read if a newer file was already wrote
   if (
-    isThereAnyClipboardFile() &&
+    isThereMoreThanOneClipboardFile() &&
     lastTimeWritten &&
     currentFileTime <= lastTimeWritten
   ) {
