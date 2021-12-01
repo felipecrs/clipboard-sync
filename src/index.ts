@@ -171,13 +171,15 @@ const getItemNumber = (file: string) => {
 
   if (fileStat.isDirectory()) {
     const match = parsedFile.base.match(
-      /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)_files$/
+      /^(0|[1-9][0-9]*)-([0-9]+)\.(0|[1-9][0-9]*)_files$/
     );
     if (match) {
       itemNumber = parseInt(match[1]);
     }
   } else {
-    const match = parsedFile.base.match(/^(0|[1-9][0-9]*)\.(txt|png)$/);
+    const match = parsedFile.base.match(
+      /^(0|[1-9][0-9]*)-([0-9]+)\.(txt|png)$/
+    );
     if (match) {
       itemNumber = parseInt(match[1]);
     }
@@ -298,19 +300,19 @@ const writeClipboardToFile = () => {
   const writeTime = getNextWriteTime();
   let destinationPath: string;
   if (clipboardType === "text") {
-    destinationPath = path.join(syncFolder, `${writeTime}.txt`);
+    destinationPath = path.join(syncFolder, `${writeTime}-${currentTime}.txt`);
     fs.writeFileSync(destinationPath, clipboardText, {
       encoding: "utf8",
     });
     lastTextWritten = clipboardText;
   } else if (clipboardType === "image") {
-    destinationPath = path.join(syncFolder, `${writeTime}.png`);
+    destinationPath = path.join(syncFolder, `${writeTime}-${currentTime}.png`);
     fs.writeFileSync(destinationPath, clipboardImage);
     lastImageSha256Written = clipboardImageSha256;
   } else if (clipboardType === "files") {
     destinationPath = path.join(
       syncFolder,
-      `${writeTime}.${clipboardFilesCount}_files`
+      `${writeTime}-${currentTime}.${clipboardFilesCount}_files`
     );
     fs.mkdirSync(destinationPath);
     clipboardFilePaths.forEach((filePath: string) => {
@@ -388,7 +390,7 @@ const readClipboardFromFile = (file: string) => {
       newImage = fs.readFileSync(file);
       newImageSha256 = calculateSha256(newImage);
     } else if (fileClipboardType === "files") {
-      const matches = fileExtension.match(/^\.([0-9]+)_files$/);
+      const matches = fileExtension.match(/^\.(0|[1-9][0-9]*)_files$/);
       if (matches && matches.length > 0) {
         newFilesCount = parseInt(matches[1]);
       } else {
