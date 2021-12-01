@@ -81,12 +81,12 @@ let filesCleanerTask: cron.ScheduledTask = null;
 let iconWaiter: NodeJS.Timeout = null;
 
 const isArrayEquals = (arr1?: any[], arr2?: any[]) => {
-  return (
-    arr1 &&
-    arr2 &&
-    arr1.length == arr2.length &&
-    arr1.every((u: any, i: number) => u === arr2[i])
-  );
+  if (arr1 && arr2 && arr1.length == arr2.length) {
+    arr1 = arr1.sort();
+    arr2 = arr2.sort();
+    return arr1.every((u: any, i: number) => u === arr2[i]);
+  }
+  return false;
 };
 
 const iterateThroughFilesRecursively = (
@@ -270,7 +270,7 @@ const writeClipboardToFile = () => {
     clipboardType === "text" &&
     (!clipboardText ||
       (lastTimeRead &&
-        currentTime - lastTimeRead < 1000 &&
+        currentTime - lastTimeRead < 5000 &&
         lastTextRead === clipboardText))
   ) {
     return;
@@ -280,7 +280,7 @@ const writeClipboardToFile = () => {
     clipboardType === "image" &&
     (!clipboardImage ||
       (lastTimeRead &&
-        currentTime - lastTimeRead < 1000 &&
+        currentTime - lastTimeRead < 5000 &&
         lastImageSha256Read === clipboardImageSha256))
   ) {
     return;
@@ -290,7 +290,7 @@ const writeClipboardToFile = () => {
     clipboardType === "files" &&
     (!clipboardFilePaths ||
       (lastTimeRead &&
-        currentTime - lastTimeRead < 1000 &&
+        currentTime - lastTimeRead < 5000 &&
         isArrayEquals(lastClipboardFilePathsRead, clipboardFilePaths)) ||
       getFilesSizeInMb(clipboardFilePaths) > 100)
   ) {
