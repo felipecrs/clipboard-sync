@@ -13,7 +13,7 @@ import clipboardEx = require("electron-clipboard-ex");
 import { createHash } from "crypto";
 import { https } from "follow-redirects";
 import Store = require("electron-store");
-import watcher = require("@parcel/watcher");
+import chokidar = require("chokidar");
 import cron = require("node-cron");
 import path = require("path");
 import fs = require("fs");
@@ -76,7 +76,7 @@ let lastClipboardFilePathsRead: string[] = null;
 let lastTimeRead: number = null;
 
 let clipboardListener: ClipboardListener = null;
-let clipboardFilesWatcher: watcher.AsyncSubscription = null;
+let clipboardFilesWatcher: chokidar.FSWatcher = null;
 let filesCleanerTask: cron.ScheduledTask = null;
 let iconWaiter: NodeJS.Timeout = null;
 
@@ -478,7 +478,7 @@ const askForFolder = () => {
   }
 };
 
-const initialize = async () => {
+const initialize = () => {
   syncFolder = config.get("folder");
 
   if (!(typeof syncFolder === "string" || typeof syncFolder === "undefined")) {
@@ -504,19 +504,12 @@ const initialize = async () => {
 
   if (config.get("receive", true)) {
     // Watches for files and reads clipboard from it
-    clipboardFilesWatcher = await watcher.subscribe(
-      syncFolder,
-      (err, events) => {
-        if (err) {
-          console.error(err);
-        }
-        events.forEach((event) => {
-          if (event.type === "create") {
-            readClipboardFromFile(event.path);
-          }
-        });
-      }
-    );
+    clipboardFilesWatcher = chokidar
+      .watch(syncFolder, {
+        ignoreInitial: true,
+        disableGlobbing: true,
+      })
+      .on("add", readClipboardFromFile);
   }
 
   if (config.get("autoCleanup", true)) {
@@ -535,7 +528,7 @@ const cleanup = () => {
   }
 
   if (clipboardFilesWatcher) {
-    clipboardFilesWatcher.unsubscribe();
+    clipboardFilesWatcher.close();
     clipboardFilesWatcher = null;
   }
 

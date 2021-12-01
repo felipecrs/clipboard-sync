@@ -63,25 +63,8 @@ The Clipboard Sync should be as fast (and as slow) as your folder synchronizatio
 If you want to build this project locally, you will need:
 
 1. [Volta](https://github.com/volta-cli/volta) for handling the correct version of Node.js and NPM (or see the correct version of Node.js and NPM in the `volta` key of [`package.json`](./package.json) and install them by yourself)
-2. If you are on Windows, you will need some additional tools because of [@parcel/watcher](https://github.com/parcel-bundler/watcher):
-
-   1. Python 3:
-
-      ```console
-      winget install Python.Python.3 --source winget
-      ```
-
-   2. Visual Studio Build Tools with C++ development component:
-
-      ```console
-      winget install Microsoft.VisualStudio.2022.BuildTools --source winget
-      ```
-
-      And then enable the _Desktop development with C++_ component as following:
-
-      ![Visual Studio Installer C++ tip](https://user-images.githubusercontent.com/29582865/143795034-62c5da8a-353d-4402-862f-4e480fc6fa69.gif)
-
-   3. `npm install` to install the dependencies and `npm start` to build and run the project.
+2. `npm install` to install the dependencies
+3. `npm start` to build and run the project
 
 ## References
 
