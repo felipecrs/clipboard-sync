@@ -146,6 +146,21 @@ const deleteFolderRecursive = (directoryPath: string) => {
   }
 };
 
+const copyFolderRecursive = (source: string, destination: string) => {
+  fs.mkdirSync(destination);
+  fs.readdirSync(source).forEach((file, index) => {
+    const curPath = path.join(source, file);
+    const fullDestination = path.join(destination, path.basename(curPath));
+    if (fs.lstatSync(curPath).isDirectory()) {
+      // recurse
+      copyFolderRecursive(curPath, fullDestination);
+    } else {
+      // copy file
+      fs.copyFileSync(curPath, fullDestination);
+    }
+  });
+};
+
 const getRedirectedUrl = async (requestOptions: RequestOptions) => {
   return await promisify(
     (requestOptions: RequestOptions, callback: Function) => {
@@ -316,10 +331,15 @@ const writeClipboardToFile = () => {
     );
     fs.mkdirSync(destinationPath);
     clipboardFilePaths.forEach((filePath: string) => {
-      fs.copyFileSync(
-        filePath,
-        path.join(destinationPath, path.basename(filePath))
+      const fullDestination = path.join(
+        destinationPath,
+        path.basename(filePath)
       );
+      if (fs.statSync(filePath).isDirectory()) {
+        copyFolderRecursive(filePath, fullDestination);
+      } else {
+        fs.copyFileSync(filePath, fullDestination);
+      }
     });
     lastClipboardFilePathsWritten = clipboardFilePaths;
   }
