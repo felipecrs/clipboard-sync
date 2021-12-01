@@ -692,9 +692,7 @@ const checkForUpdatesPress = async () => {
         `https://github.com/felipecrs/clipboard-sync/releases/download/v${update.newVersion}/Clipboard.Sync-${update.newVersion}.Setup.exe`
       );
     }
-    shell.openExternal(
-      "https://github.com/felipecrs/clipboard-sync/releases/latest"
-    );
+    shell.openExternal("https://github.com/felipecrs/clipboard-sync/releases");
   } else {
     new Notification({
       title: "No updates found",
