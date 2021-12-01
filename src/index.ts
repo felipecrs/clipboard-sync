@@ -222,7 +222,16 @@ const isThereAnyClipboardFile = () => {
   return found;
 };
 
+let lastTimeChecked: number = null;
+
 const writeClipboardToFile = () => {
+  // Prevents duplicated clipboard events
+  const checkTime = Date.now();
+  if (lastTimeChecked && checkTime - lastTimeChecked < 1000) {
+    return;
+  }
+  lastTimeChecked = checkTime;
+
   let clipboardType: ClipboardType;
   let clipboardText: string;
   let clipboardImage: Buffer;
