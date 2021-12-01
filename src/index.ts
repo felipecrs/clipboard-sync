@@ -226,11 +226,11 @@ let lastTimeChecked: number = null;
 
 const writeClipboardToFile = () => {
   // Prevents duplicated clipboard events
-  const checkTime = Date.now();
-  if (lastTimeChecked && checkTime - lastTimeChecked < 1000) {
+  const currentTime = Date.now();
+  if (lastTimeChecked && currentTime - lastTimeChecked < 1000) {
     return;
   }
-  lastTimeChecked = checkTime;
+  lastTimeChecked = currentTime;
 
   let clipboardType: ClipboardType;
   let clipboardText: string;
@@ -261,16 +261,23 @@ const writeClipboardToFile = () => {
     return;
   }
 
+  // Prevent sending the clipboard that was just received
   if (
     clipboardType === "text" &&
-    (!clipboardText || lastTextRead === clipboardText)
+    (!clipboardText ||
+      (lastTimeRead &&
+        currentTime - lastTimeRead < 1000 &&
+        lastTextRead === clipboardText))
   ) {
     return;
   }
 
   if (
     clipboardType === "image" &&
-    (!clipboardImage || lastImageSha256Read === clipboardImageSha256)
+    (!clipboardImage ||
+      (lastTimeRead &&
+        currentTime - lastTimeRead < 1000 &&
+        lastImageSha256Read === clipboardImageSha256))
   ) {
     return;
   }
@@ -278,7 +285,9 @@ const writeClipboardToFile = () => {
   if (
     clipboardType === "files" &&
     (!clipboardFilePaths ||
-      isArrayEquals(lastClipboardFilePathsRead, clipboardFilePaths) ||
+      (lastTimeRead &&
+        currentTime - lastTimeRead < 1000 &&
+        isArrayEquals(lastClipboardFilePathsRead, clipboardFilePaths)) ||
       getFilesSizeInMb(clipboardFilePaths) > 100)
   ) {
     return;
@@ -317,6 +326,8 @@ const writeClipboardToFile = () => {
 };
 
 const readClipboardFromFile = (file: string) => {
+  const currentTime = Date.now();
+
   const filename = path.relative(syncFolder, file).split(path.sep)[0];
   file = path.join(syncFolder, filename);
 
@@ -440,7 +451,7 @@ const readClipboardFromFile = (file: string) => {
     lastClipboardFilePathsRead = newFilePaths;
   }
   console.log(`Clipboard was read from ${file}`);
-  lastTimeRead = currentFileTime;
+  lastTimeRead = currentTime;
 
   setIconFor5Seconds("clipboard_received");
 };
