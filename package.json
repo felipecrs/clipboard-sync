@@ -2,7 +2,7 @@
   "name": "clipboard-sync",
   "productName": "Clipboard Sync",
   "version": "0.7.6",
-  "description": "My Electron application description",
+  "description": "Sync your clipboard between computers using a shared folder",
   "main": "lib/index.js",
   "scripts": {
     "clean": "rimraf lib out",
