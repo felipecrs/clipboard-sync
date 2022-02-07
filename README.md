@@ -16,6 +16,12 @@ Currently supports the following formats in the clipboard:
 
 Download the [latest release](https://github.com/felipecrs/clipboard-sync/releases/latest) for your platform and open it.
 
+Alternatively, you can install it with [`winget`](https://github.com/microsoft/winget-cli#readme):
+
+```console
+winget install clipboard-sync
+```
+
 When running for the first time, the tool will ask you which folder to use for synchronizing the clipboard. Select the same shared folder between your computers in both of them.
 
 ## See it in action
