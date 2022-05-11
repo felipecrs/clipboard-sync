@@ -793,6 +793,10 @@ const createAppIcon = () => {
     appIcon.popUpContextMenu();
   });
 
+  appIcon.on("click", () => {
+    shell.openPath(syncFolder);
+  });
+
   initialize();
 
   if (firstTime) {
