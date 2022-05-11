@@ -119,6 +119,14 @@ const iterateThroughFilesRecursively = (
   return results;
 };
 
+const getTotalNumberOfFiles = (paths: string[]): number => {
+  let totalNumberOfFiles = 0;
+  iterateThroughFilesRecursively(paths, (file) => {
+    totalNumberOfFiles++;
+  });
+  return totalNumberOfFiles;
+};
+
 const getFilesSizeInMb = (paths: string[]) => {
   let totalSize = 0;
   iterateThroughFilesRecursively(paths, (file) => {
@@ -274,7 +282,6 @@ const writeClipboardToFile = () => {
       clipboardType = "image";
     } else if (clipboardFormats.includes("text/uri-list")) {
       clipboardFilePaths = clipboardEx.readFilePaths();
-      clipboardFilesCount = clipboardFilePaths.length;
       clipboardType = "files";
     }
   } catch (error) {
@@ -330,6 +337,7 @@ const writeClipboardToFile = () => {
     fs.writeFileSync(destinationPath, clipboardImage);
     lastImageSha256Written = clipboardImageSha256;
   } else if (clipboardType === "files") {
+    clipboardFilesCount = getTotalNumberOfFiles(clipboardFilePaths);
     destinationPath = path.join(
       syncFolder,
       `${writeTime}-${hostname}.${clipboardFilesCount}_files`
@@ -381,7 +389,6 @@ const readClipboardFromFile = (file: string) => {
   let currentClipboardType: ClipboardType;
   let currentImageSha256: string;
   let currentFilePaths: string[];
-  let currentFilesCount: number;
 
   const clipboardFormats = clipboard.availableFormats();
   try {
@@ -394,7 +401,6 @@ const readClipboardFromFile = (file: string) => {
       currentClipboardType = "image";
     } else if (clipboardFormats.includes("text/uri-list")) {
       currentFilePaths = clipboardEx.readFilePaths();
-      currentFilesCount = currentFilePaths.length;
       currentClipboardType = "files";
     }
   } catch (error) {
@@ -425,7 +431,7 @@ const readClipboardFromFile = (file: string) => {
       newFilePaths = fs
         .readdirSync(file)
         .map((fileName: string) => path.join(file, fileName));
-      const filesCountInFolder = newFilePaths.length;
+      const filesCountInFolder = getTotalNumberOfFiles(newFilePaths);
       if (newFilesCount !== filesCountInFolder) {
         console.error(
           `Not all files are yet present in _files folder. Current: ${filesCountInFolder}, expected: ${newFilesCount}. Skipping...`
