@@ -802,7 +802,7 @@ const createAppIcon = () => {
     appIcon.popUpContextMenu();
   });
 
-  appIcon.on("click", () => {
+  appIcon.on("double-click", () => {
     shell.openPath(syncFolder);
   });
 
