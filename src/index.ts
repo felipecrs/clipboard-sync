@@ -15,6 +15,7 @@ import { https } from "follow-redirects";
 import Store = require("electron-store");
 import chokidar = require("chokidar");
 import cron = require("node-cron");
+import os = require("os");
 import path = require("path");
 import fs = require("fs");
 import semver = require("semver");
@@ -79,6 +80,8 @@ let clipboardListener: ClipboardListener = null;
 let clipboardFilesWatcher: chokidar.FSWatcher = null;
 let filesCleanerTask: cron.ScheduledTask = null;
 let iconWaiter: NodeJS.Timeout = null;
+
+const hostname = os.hostname();
 
 const isArrayEquals = (arr1?: any[], arr2?: any[]) => {
   if (arr1 && arr2 && arr1.length == arr2.length) {
@@ -173,7 +176,7 @@ const getRedirectedUrl = async (requestOptions: RequestOptions) => {
 };
 
 // returns 0 if not valid
-const getItemNumber = (file: string) => {
+const getItemNumber = (file: string, exceptOwn: boolean = false) => {
   const parsedFile = path.parse(file);
   let itemNumber = 0;
   let fileStat;
@@ -186,16 +189,16 @@ const getItemNumber = (file: string) => {
 
   if (fileStat.isDirectory()) {
     const match = parsedFile.base.match(
-      /^(0|[1-9][0-9]*)-([0-9]+)\.(0|[1-9][0-9]*)_files$/
+      /^(0|[1-9][0-9]*)-([0-9a-zA-Z-]+)\.(0|[1-9][0-9]*)_files$/
     );
-    if (match) {
+    if (match && !(exceptOwn && match[2] === hostname)) {
       itemNumber = parseInt(match[1]);
     }
   } else {
     const match = parsedFile.base.match(
-      /^(0|[1-9][0-9]*)-([0-9]+)\.(txt|png)$/
+      /^(0|[1-9][0-9]*)-([0-9a-zA-Z-]+)\.(txt|png)$/
     );
-    if (match) {
+    if (match && !(exceptOwn && match[2] === hostname)) {
       itemNumber = parseInt(match[1]);
     }
   }
@@ -317,19 +320,19 @@ const writeClipboardToFile = () => {
   const writeTime = getNextWriteTime();
   let destinationPath: string;
   if (clipboardType === "text") {
-    destinationPath = path.join(syncFolder, `${writeTime}-${currentTime}.txt`);
+    destinationPath = path.join(syncFolder, `${writeTime}-${hostname}.txt`);
     fs.writeFileSync(destinationPath, clipboardText, {
       encoding: "utf8",
     });
     lastTextWritten = clipboardText;
   } else if (clipboardType === "image") {
-    destinationPath = path.join(syncFolder, `${writeTime}-${currentTime}.png`);
+    destinationPath = path.join(syncFolder, `${writeTime}-${hostname}.png`);
     fs.writeFileSync(destinationPath, clipboardImage);
     lastImageSha256Written = clipboardImageSha256;
   } else if (clipboardType === "files") {
     destinationPath = path.join(
       syncFolder,
-      `${writeTime}-${currentTime}.${clipboardFilesCount}_files`
+      `${writeTime}-${hostname}.${clipboardFilesCount}_files`
     );
     fs.mkdirSync(destinationPath);
     clipboardFilePaths.forEach((filePath: string) => {
@@ -357,7 +360,7 @@ const readClipboardFromFile = (file: string) => {
   const filename = path.relative(syncFolder, file).split(path.sep)[0];
   file = path.join(syncFolder, filename);
 
-  const currentFileTime = getItemNumber(file);
+  const currentFileTime = getItemNumber(file, true);
   if (!currentFileTime) {
     return;
   }
