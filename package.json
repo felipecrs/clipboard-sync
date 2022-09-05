@@ -25,31 +25,31 @@
   "repository": "https://github.com/felipecrs/clipboard-sync.git",
   "dependencies": {
     "chokidar": "^3.5.3",
-    "clipboard-event": "^1.5.0",
+    "clipboard-event": "^1.6.0",
     "electron-clipboard-ex": "^1.3.3",
     "electron-squirrel-startup": "^1.0.0",
-    "electron-store": "^8.0.1",
-    "follow-redirects": "^1.15.0",
-    "node-cron": "^3.0.0",
+    "electron-store": "^8.1.0",
+    "follow-redirects": "^1.15.1",
+    "node-cron": "^3.0.2",
     "semver": "^7.3.7"
   },
   "devDependencies": {
-    "@electron-forge/cli": "^6.0.0-beta.63",
-    "@electron-forge/maker-deb": "^6.0.0-beta.63",
-    "@electron-forge/maker-rpm": "^6.0.0-beta.63",
-    "@electron-forge/maker-squirrel": "^6.0.0-beta.63",
-    "@electron-forge/maker-zip": "^6.0.0-beta.63",
-    "@electron-forge/publisher-github": "^6.0.0-beta.63",
+    "@electron-forge/cli": "^6.0.0-beta.65",
+    "@electron-forge/maker-deb": "^6.0.0-beta.65",
+    "@electron-forge/maker-rpm": "^6.0.0-beta.65",
+    "@electron-forge/maker-squirrel": "^6.0.0-beta.65",
+    "@electron-forge/maker-zip": "^6.0.0-beta.65",
+    "@electron-forge/publisher-github": "^6.0.0-beta.65",
     "@types/follow-redirects": "^1.14.1",
-    "@types/node": "^16.11.34",
-    "@types/node-cron": "^3.0.1",
-    "@types/semver": "^7.3.9",
-    "electron": "^18.2.2",
+    "@types/node": "^16.11.57",
+    "@types/node-cron": "^3.0.3",
+    "@types/semver": "^7.3.12",
+    "electron": "^20.1.1",
     "rimraf": "^3.0.2",
-    "typescript": "^4.6.4"
+    "typescript": "^4.8.2"
   },
   "volta": {
-    "node": "16.15.0",
-    "npm": "8.10.0"
+    "node": "16.17.0",
+    "npm": "8.19.1"
   }
 }
