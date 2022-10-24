@@ -30,6 +30,7 @@
     "electron-squirrel-startup": "^1.0.0",
     "electron-store": "^8.1.0",
     "follow-redirects": "^1.15.2",
+    "fswin": "^3.22.106",
     "node-cron": "^3.0.2",
     "semver": "^7.3.8"
   },

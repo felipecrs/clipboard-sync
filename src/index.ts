@@ -1,17 +1,19 @@
+import { createHash } from "crypto";
 import {
   app,
-  Tray,
-  Menu,
-  dialog,
-  shell,
-  Notification,
   clipboard,
+  dialog,
+  Menu,
   nativeImage,
-  MenuItem,
+  Notification,
+  shell,
+  Tray,
 } from "electron";
-import clipboardEx = require("electron-clipboard-ex");
-import { createHash } from "crypto";
 import { https } from "follow-redirects";
+import { RequestOptions } from "https";
+import { exit } from "process";
+import { promisify } from "util";
+import clipboardEx = require("electron-clipboard-ex");
 import Store = require("electron-store");
 import chokidar = require("chokidar");
 import cron = require("node-cron");
@@ -19,9 +21,8 @@ import os = require("os");
 import path = require("path");
 import fs = require("fs");
 import semver = require("semver");
-import { exit } from "process";
-import { promisify } from "util";
-import { RequestOptions } from "https";
+// @ts-ignore
+import fswin = require("fswin");
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // eslint-disable-line global-require
@@ -184,7 +185,10 @@ const getRedirectedUrl = async (requestOptions: RequestOptions) => {
 };
 
 // returns 0 if not valid
-const getItemNumber = (file: string, exceptOwn: boolean = false) => {
+const getItemNumber = (
+  file: string,
+  filter: "none" | "from-others" | "from-myself" = "none"
+) => {
   const parsedFile = path.parse(file);
   let itemNumber = 0;
   let fileStat;
@@ -199,15 +203,43 @@ const getItemNumber = (file: string, exceptOwn: boolean = false) => {
     const match = parsedFile.base.match(
       /^(0|[1-9][0-9]*)-([0-9a-zA-Z-]+)\.(0|[1-9][0-9]*)_files$/
     );
-    if (match && !(exceptOwn && match[2] === hostname)) {
-      itemNumber = parseInt(match[1]);
+    if (match) {
+      switch (filter) {
+        case "from-myself":
+          if (match[2] === hostname) {
+            itemNumber = parseInt(match[1]);
+          }
+          break;
+        case "from-others":
+          if (match[2] !== hostname) {
+            itemNumber = parseInt(match[1]);
+          }
+          break;
+        default:
+          itemNumber = parseInt(match[1]);
+          break;
+      }
     }
   } else {
     const match = parsedFile.base.match(
       /^(0|[1-9][0-9]*)-([0-9a-zA-Z-]+)\.(txt|png)$/
     );
-    if (match && !(exceptOwn && match[2] === hostname)) {
-      itemNumber = parseInt(match[1]);
+    if (match) {
+      switch (filter) {
+        case "from-myself":
+          if (match[2] === hostname) {
+            itemNumber = parseInt(match[1]);
+          }
+          break;
+        case "from-others":
+          if (match[2] !== hostname) {
+            itemNumber = parseInt(match[1]);
+          }
+          break;
+        default:
+          itemNumber = parseInt(match[1]);
+          break;
+      }
     }
   }
   return itemNumber;
@@ -368,7 +400,7 @@ const readClipboardFromFile = (file: string) => {
   const filename = path.relative(syncFolder, file).split(path.sep)[0];
   file = path.join(syncFolder, filename);
 
-  const currentFileTime = getItemNumber(file, true);
+  const currentFileTime = getItemNumber(file, "from-others");
   if (!currentFileTime) {
     return;
   }
@@ -495,7 +527,7 @@ const cleanFiles = () => {
   const currentTimeMinus5Min = Date.now() - 300000;
   fs.readdirSync(syncFolder).forEach((file) => {
     const filePath = path.join(syncFolder, file);
-    if (getItemNumber(filePath)) {
+    if (getItemNumber(filePath, "from-myself")) {
       const fileStat = fs.statSync(filePath);
       if (fileStat.ctime.getTime() <= currentTimeMinus5Min) {
         if (fileStat.isDirectory()) {
@@ -504,6 +536,12 @@ const cleanFiles = () => {
           fs.unlinkSync(filePath);
         }
       }
+    } else if (
+      process.platform === "win32" &&
+      getItemNumber(filePath, "from-others")
+    ) {
+      // unsync file or folder
+      fswin.setAttributesSync(filePath, { IS_UNPINNED: true });
     }
   });
 };
