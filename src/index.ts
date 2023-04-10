@@ -21,7 +21,6 @@ import os = require("os");
 import path = require("path");
 import fs = require("fs");
 import semver = require("semver");
-// @ts-ignore
 import fswin = require("fswin");
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
