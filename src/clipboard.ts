@@ -103,8 +103,14 @@ export const isThereMoreThanOneClipboardFile = (syncFolder: string) => {
   return found > 1;
 };
 
+// Removes from-myself files older than 5 minutes,
+// Unsyncs from-others files older than 1 minute,
+// And removes from-others files older than 10 minutes.
 export const cleanFiles = (syncFolder: string) => {
-  const currentTimeMinus5Min = Date.now() - 300000;
+  const now = Date.now();
+  const currentTimeMinus1Min = now - 60000;
+  const currentTimeMinus5Min = now - 300000;
+  const currentTimeMinus10Min = now - 600000;
   fs.readdirSync(syncFolder).forEach((file) => {
     const filePath = path.join(syncFolder, file);
     if (getItemNumber(filePath, "from-myself")) {
@@ -116,12 +122,27 @@ export const cleanFiles = (syncFolder: string) => {
           fs.unlinkSync(filePath);
         }
       }
-    } else if (
-      process.platform === "win32" &&
-      getItemNumber(filePath, "from-others")
-    ) {
-      // unsync file or folder
-      fswin.setAttributesSync(filePath, { IS_UNPINNED: true });
+    } else if (getItemNumber(filePath, "from-others")) {
+      const fileStat = fs.statSync(filePath);
+      if (fileStat.ctime.getTime() <= currentTimeMinus1Min) {
+        if (process.platform === "win32") {
+          unsyncFileOrFolder(filePath);
+        }
+      } else if (fileStat.ctime.getTime() <= currentTimeMinus10Min) {
+        if (fileStat.isDirectory()) {
+          deleteFolderRecursive(filePath);
+        } else {
+          fs.unlinkSync(filePath);
+        }
+      }
     }
+  });
+};
+
+export const unsyncFileOrFolder = (filePath: string) => {
+  // unsync file or folder
+  fswin.setAttributesSync(filePath, {
+    IS_UNPINNED: true,
+    IS_PINNED: false,
   });
 };

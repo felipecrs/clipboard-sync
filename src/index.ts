@@ -21,6 +21,7 @@ import {
   getItemNumber,
   getNextWriteTime,
   isThereMoreThanOneClipboardFile,
+  unsyncFileOrFolder,
 } from "./clipboard";
 import { hostname } from "./global";
 import {
@@ -33,7 +34,6 @@ import {
 } from "./utils";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
-// eslint-disable-line global-require
 if (require("electron-squirrel-startup")) {
   app.exit();
 }
@@ -74,9 +74,6 @@ let firstTime = true;
 
 let syncFolder: string = null;
 
-let lastTextWritten: string = null;
-let lastImageSha256Written: string = null;
-let lastClipboardFilePathsWritten: string[] = null;
 let lastTimeWritten: number = null;
 
 let lastTextRead: string = null;
@@ -166,11 +163,9 @@ const writeClipboardToFile = () => {
     fs.writeFileSync(destinationPath, clipboardText, {
       encoding: "utf8",
     });
-    lastTextWritten = clipboardText;
   } else if (clipboardType === "image") {
     destinationPath = path.join(syncFolder, `${writeTime}-${hostname}.png`);
     fs.writeFileSync(destinationPath, clipboardImage);
-    lastImageSha256Written = clipboardImageSha256;
   } else if (clipboardType === "files") {
     clipboardFilesCount = getTotalNumberOfFiles(clipboardFilePaths);
     destinationPath = path.join(
@@ -189,7 +184,6 @@ const writeClipboardToFile = () => {
         fs.copyFileSync(filePath, fullDestination);
       }
     });
-    lastClipboardFilePathsWritten = clipboardFilePaths;
   }
   console.log(`Clipboard written to ${destinationPath}`);
   lastTimeWritten = writeTime;
@@ -277,6 +271,11 @@ const readClipboardFromFile = (file: string) => {
   } catch (error) {
     console.error(`Error reading clipboard from file ${fileName}`);
     return;
+  }
+
+  // On Windows (OneDrive), unsync after reading it
+  if (process.platform === "win32") {
+    unsyncFileOrFolder(file);
   }
 
   if (currentClipboardType === fileClipboardType) {
@@ -412,15 +411,14 @@ const initialize = async () => {
   }
 
   if (config.get("autoCleanup", true)) {
-    // Remove files older than 5 minutes
-    cleanFiles(syncFolder);
     filesCleanerTask = cron.schedule(
-      "*/5 * * * *",
+      "*/1 * * * *",
       () => {
         cleanFiles(syncFolder);
       },
       {
         scheduled: true,
+        runOnInit: true,
       }
     );
   }
