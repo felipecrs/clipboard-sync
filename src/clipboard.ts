@@ -3,7 +3,7 @@ import * as path from "node:path";
 import * as fswin from "fswin";
 
 import { hostname } from "./global";
-import { deleteFolderRecursive } from "./utils";
+import { deleteFolderRecursive, iterateThroughFilesRecursively } from "./utils";
 
 // returns 0 if not valid
 export const getItemNumber = (
@@ -126,7 +126,7 @@ export const cleanFiles = (syncFolder: string) => {
       const fileStat = fs.statSync(filePath);
       if (fileStat.ctime.getTime() <= currentTimeMinus1Min) {
         if (process.platform === "win32") {
-          unsyncFileOrFolder(filePath);
+          unsyncFileOrFolderRecursively(filePath);
         }
       } else if (fileStat.ctime.getTime() <= currentTimeMinus10Min) {
         if (fileStat.isDirectory()) {
@@ -139,10 +139,11 @@ export const cleanFiles = (syncFolder: string) => {
   });
 };
 
-export const unsyncFileOrFolder = (filePath: string) => {
-  // unsync file or folder
-  fswin.setAttributesSync(filePath, {
-    IS_UNPINNED: true,
-    IS_PINNED: false,
+export const unsyncFileOrFolderRecursively = (fileOrFolder: string) => {
+  iterateThroughFilesRecursively([fileOrFolder], (file) => {
+    fswin.setAttributesSync(file, {
+      IS_UNPINNED: true,
+      IS_PINNED: false,
+    });
   });
 };
