@@ -391,14 +391,12 @@ const initialize = async () => {
           console.error(err);
           return;
         }
-        // Call readClipboardFromFile for the last file created
-        const fileCreated = events
-          .filter((event) => event.type === "create")
-          .pop();
-
-        if (fileCreated) {
-          readClipboardFromFile(fileCreated.path);
-        }
+        // Call readClipboardFromFile for each "create" event
+        events.forEach((event) => {
+          if (event.type === "create") {
+            readClipboardFromFile(event.path);
+          }
+        });
       },
       {
         // TODO: Add support for other platforms
