@@ -21,7 +21,6 @@ import {
   getItemNumber,
   getNextWriteTime,
   isThereMoreThanOneClipboardFile,
-  unsyncFileOrFolder,
 } from "./clipboard";
 import { hostname } from "./global";
 import {
@@ -271,11 +270,6 @@ const readClipboardFromFile = (file: string) => {
   } catch (error) {
     console.error(`Error reading clipboard from file ${fileName}`);
     return;
-  }
-
-  // On Windows (OneDrive), unsync after reading it
-  if (process.platform === "win32") {
-    unsyncFileOrFolder(file);
   }
 
   if (currentClipboardType === fileClipboardType) {
