@@ -1,4 +1,4 @@
-import { createHash } from "crypto";
+import * as watcher from "@parcel/watcher";
 import {
   app,
   clipboard,
@@ -9,19 +9,28 @@ import {
   shell,
   Tray,
 } from "electron";
-import { https } from "follow-redirects";
-import { RequestOptions } from "https";
-import { exit } from "process";
-import { promisify } from "util";
-import clipboardEx = require("electron-clipboard-ex");
-import Store = require("electron-store");
-import watcher = require("@parcel/watcher");
-import cron = require("node-cron");
-import os = require("os");
-import path = require("path");
-import fs = require("fs");
-import semver = require("semver");
-import fswin = require("fswin");
+import * as clipboardEx from "electron-clipboard-ex";
+import * as Store from "electron-store";
+import * as cron from "node-cron";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as semver from "semver";
+
+import {
+  cleanFiles,
+  getItemNumber,
+  getNextWriteTime,
+  isThereMoreThanOneClipboardFile,
+} from "./clipboard";
+import { hostname } from "./global";
+import {
+  calculateSha256,
+  copyFolderRecursive,
+  getFilesSizeInMb,
+  getRedirectedUrl,
+  getTotalNumberOfFiles,
+  isArrayEquals,
+} from "./utils";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 // eslint-disable-line global-require
@@ -32,7 +41,7 @@ if (require("electron-squirrel-startup")) {
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
-  exit();
+  process.exit();
 }
 
 type ConfigType = {
@@ -61,7 +70,6 @@ const config = new Store<ConfigType>({
 });
 
 let appIcon: Tray = null;
-let contextMenu: Menu = null;
 let firstTime = true;
 
 let syncFolder: string = null;
@@ -80,210 +88,6 @@ let clipboardListener: ClipboardListener = null;
 let clipboardFilesWatcher: watcher.AsyncSubscription = null;
 let filesCleanerTask: cron.ScheduledTask = null;
 let iconWaiter: NodeJS.Timeout = null;
-
-const hostname = os.hostname();
-
-const isArrayEquals = (arr1?: any[], arr2?: any[]) => {
-  if (arr1 && arr2 && arr1.length == arr2.length) {
-    arr1 = arr1.sort();
-    arr2 = arr2.sort();
-    return arr1.every((u: any, i: number) => u === arr2[i]);
-  }
-  return false;
-};
-
-const iterateThroughFilesRecursively = (
-  paths: string[],
-  fn: (arg0: string) => unknown
-): unknown[] => {
-  const results: unknown[] = [];
-  paths.forEach((fileOrFolder) => {
-    if (fs.existsSync(fileOrFolder)) {
-      if (fs.statSync(fileOrFolder).isDirectory()) {
-        fs.readdirSync(fileOrFolder).forEach((file) => {
-          const filePath = path.join(fileOrFolder, file);
-          iterateThroughFilesRecursively([filePath], fn).forEach((result) => {
-            if (result) {
-              results.push(result);
-            }
-          });
-        });
-      } else {
-        const result = fn(fileOrFolder);
-        if (result) {
-          results.push(result);
-        }
-      }
-    }
-  });
-  return results;
-};
-
-const getTotalNumberOfFiles = (paths: string[]): number => {
-  let totalNumberOfFiles = 0;
-  iterateThroughFilesRecursively(paths, (file) => {
-    totalNumberOfFiles++;
-  });
-  return totalNumberOfFiles;
-};
-
-const getFilesSizeInMb = (paths: string[]) => {
-  let totalSize = 0;
-  iterateThroughFilesRecursively(paths, (file) => {
-    return fs.lstatSync(file).size / (1024 * 1024);
-  }).forEach((size) => {
-    if (typeof size === "number") {
-      totalSize += size;
-    }
-  });
-
-  return totalSize;
-};
-
-// https://stackoverflow.com/a/32197381/12156188
-const deleteFolderRecursive = (directoryPath: string) => {
-  if (fs.existsSync(directoryPath)) {
-    fs.readdirSync(directoryPath).forEach((file, index) => {
-      const curPath = path.join(directoryPath, file);
-      if (fs.lstatSync(curPath).isDirectory()) {
-        // recurse
-        deleteFolderRecursive(curPath);
-      } else {
-        // delete file
-        fs.unlinkSync(curPath);
-      }
-    });
-    fs.rmdirSync(directoryPath);
-  }
-};
-
-const copyFolderRecursive = (source: string, destination: string) => {
-  fs.mkdirSync(destination);
-  fs.readdirSync(source).forEach((file, index) => {
-    const curPath = path.join(source, file);
-    const fullDestination = path.join(destination, path.basename(curPath));
-    if (fs.lstatSync(curPath).isDirectory()) {
-      // recurse
-      copyFolderRecursive(curPath, fullDestination);
-    } else {
-      // copy file
-      fs.copyFileSync(curPath, fullDestination);
-    }
-  });
-};
-
-const getRedirectedUrl = async (requestOptions: RequestOptions) => {
-  return await promisify(
-    (requestOptions: RequestOptions, callback: Function) => {
-      const request = https.request(requestOptions, (response) => {
-        callback(null, response.responseUrl);
-      });
-      request.end();
-    }
-  )(requestOptions);
-};
-
-// returns 0 if not valid
-const getItemNumber = (
-  file: string,
-  filter: "none" | "from-others" | "from-myself" = "none"
-) => {
-  const parsedFile = path.parse(file);
-  let itemNumber = 0;
-  let fileStat;
-
-  try {
-    fileStat = fs.lstatSync(file);
-  } catch (error) {
-    return itemNumber;
-  }
-
-  if (fileStat.isDirectory()) {
-    const match = parsedFile.base.match(
-      /^(0|[1-9][0-9]*)-([0-9a-zA-Z-]+)\.(0|[1-9][0-9]*)_files$/
-    );
-    if (match) {
-      switch (filter) {
-        case "from-myself":
-          if (match[2] === hostname) {
-            itemNumber = parseInt(match[1]);
-          }
-          break;
-        case "from-others":
-          if (match[2] !== hostname) {
-            itemNumber = parseInt(match[1]);
-          }
-          break;
-        default:
-          itemNumber = parseInt(match[1]);
-          break;
-      }
-    }
-  } else {
-    const match = parsedFile.base.match(
-      /^(0|[1-9][0-9]*)-([0-9a-zA-Z-]+)\.(txt|png)$/
-    );
-    if (match) {
-      switch (filter) {
-        case "from-myself":
-          if (match[2] === hostname) {
-            itemNumber = parseInt(match[1]);
-          }
-          break;
-        case "from-others":
-          if (match[2] !== hostname) {
-            itemNumber = parseInt(match[1]);
-          }
-          break;
-        default:
-          itemNumber = parseInt(match[1]);
-          break;
-      }
-    }
-  }
-  return itemNumber;
-};
-
-const calculateSha256 = (data: Buffer) => {
-  return createHash("sha256").update(data).digest("hex");
-};
-
-const getNextWriteTime = () => {
-  const numbers: number[] = [];
-  fs.readdirSync(syncFolder).forEach((file) => {
-    file = path.join(syncFolder, file);
-    const itemNumber = getItemNumber(file);
-    if (itemNumber) {
-      numbers.push(itemNumber);
-    }
-  });
-  if (numbers.length > 0) {
-    // https://stackoverflow.com/a/1063027/12156188
-    return (
-      numbers
-        .sort((a, b) => {
-          return a - b;
-        })
-        .at(-1) + 1
-    );
-  }
-  return 1;
-};
-
-const isThereMoreThanOneClipboardFile = () => {
-  let found = 0;
-  fs.readdirSync(syncFolder).forEach((file) => {
-    file = path.join(syncFolder, file);
-    const itemNumber = getItemNumber(file);
-    if (itemNumber) {
-      found++;
-      if (found > 1) {
-        return;
-      }
-    }
-  });
-  return found > 1;
-};
 
 let lastTimeChecked: number = null;
 
@@ -355,7 +159,7 @@ const writeClipboardToFile = () => {
     return;
   }
 
-  const writeTime = getNextWriteTime();
+  const writeTime = getNextWriteTime(syncFolder);
   let destinationPath: string;
   if (clipboardType === "text") {
     destinationPath = path.join(syncFolder, `${writeTime}-${hostname}.txt`);
@@ -499,7 +303,7 @@ const readClipboardFromFile = (file: string) => {
 
   // Skips the read if a newer file was already wrote
   if (
-    isThereMoreThanOneClipboardFile() &&
+    isThereMoreThanOneClipboardFile(syncFolder) &&
     lastTimeWritten &&
     currentFileTime <= lastTimeWritten
   ) {
@@ -520,29 +324,6 @@ const readClipboardFromFile = (file: string) => {
   lastTimeRead = currentTime;
 
   setIconFor5Seconds("clipboard_received");
-};
-
-const cleanFiles = () => {
-  const currentTimeMinus5Min = Date.now() - 300000;
-  fs.readdirSync(syncFolder).forEach((file) => {
-    const filePath = path.join(syncFolder, file);
-    if (getItemNumber(filePath, "from-myself")) {
-      const fileStat = fs.statSync(filePath);
-      if (fileStat.ctime.getTime() <= currentTimeMinus5Min) {
-        if (fileStat.isDirectory()) {
-          deleteFolderRecursive(filePath);
-        } else {
-          fs.unlinkSync(filePath);
-        }
-      }
-    } else if (
-      process.platform === "win32" &&
-      getItemNumber(filePath, "from-others")
-    ) {
-      // unsync file or folder
-      fswin.setAttributesSync(filePath, { IS_UNPINNED: true });
-    }
-  });
 };
 
 const askForFolder = () => {
@@ -632,10 +413,16 @@ const initialize = async () => {
 
   if (config.get("autoCleanup", true)) {
     // Remove files older than 5 minutes
-    cleanFiles();
-    filesCleanerTask = cron.schedule("*/5 * * * *", cleanFiles, {
-      scheduled: true,
-    });
+    cleanFiles(syncFolder);
+    filesCleanerTask = cron.schedule(
+      "*/5 * * * *",
+      () => {
+        cleanFiles(syncFolder);
+      },
+      {
+        scheduled: true,
+      }
+    );
   }
 };
 
