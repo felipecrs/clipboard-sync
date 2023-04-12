@@ -45,8 +45,12 @@ if (!gotTheLock) {
 
 type ConfigType = {
   folder?: string;
-  send: boolean;
-  receive: boolean;
+  sendTexts: boolean;
+  sendImages: boolean;
+  sendFiles: boolean;
+  receiveTexts: boolean;
+  receiveImages: boolean;
+  receiveFiles: boolean;
   autoCleanup: boolean;
 };
 
@@ -62,8 +66,12 @@ type ClipboardType = "text" | "image" | "files";
 
 const config = new Store<ConfigType>({
   defaults: {
-    send: true,
-    receive: true,
+    sendTexts: true,
+    sendImages: true,
+    sendFiles: true,
+    receiveTexts: true,
+    receiveImages: true,
+    receiveFiles: true,
     autoCleanup: true,
   },
 });
@@ -105,13 +113,22 @@ const writeClipboardToFile = () => {
 
   try {
     if (clipboardFormats.includes("text/plain")) {
+      if (!config.get("sendTexts", true)) {
+        return;
+      }
       clipboardText = clipboard.readText();
       clipboardType = "text";
     } else if (clipboardFormats.includes("image/png")) {
+      if (!config.get("sendImages", true)) {
+        return;
+      }
       clipboardImage = clipboard.readImage().toPNG();
       clipboardImageSha256 = calculateSha256(clipboardImage);
       clipboardType = "image";
     } else if (clipboardFormats.includes("text/uri-list")) {
+      if (!config.get("sendFiles", true)) {
+        return;
+      }
       clipboardFilePaths = clipboardEx.readFilePaths();
       clipboardType = "files";
     }
@@ -242,13 +259,22 @@ const readClipboardFromFile = (file: string) => {
   let newFilesCount: number;
   try {
     if (fileClipboardType === "text") {
+      if (!config.get("receiveTexts", true)) {
+        return;
+      }
       newText = fs.readFileSync(file, {
         encoding: "utf8",
       });
     } else if (fileClipboardType === "image") {
+      if (!config.get("receiveImages", true)) {
+        return;
+      }
       newImage = fs.readFileSync(file);
       newImageSha256 = calculateSha256(newImage);
     } else if (fileClipboardType === "files") {
+      if (!config.get("receiveFiles", true)) {
+        return;
+      }
       const matches = fileExtension.match(/^\.(0|[1-9][0-9]*)_files$/);
       if (matches && matches.length > 0) {
         newFilesCount = parseInt(matches[1]);
@@ -369,13 +395,21 @@ const initialize = async () => {
     fs.mkdirSync(syncFolder);
   }
 
-  if (config.get("send", true)) {
+  if (
+    config.get("sendTexts", true) ||
+    config.get("sendImages", true) ||
+    config.get("sendFiles", true)
+  ) {
     clipboardListener = require("clipboard-event");
     clipboardListener.startListening();
     clipboardListener.on("change", writeClipboardToFile);
   }
 
-  if (config.get("receive", true)) {
+  if (
+    config.get("receiveTexts", true) ||
+    config.get("receiveImages", true) ||
+    config.get("receiveFiles", true)
+  ) {
     // Watches for files and reads clipboard from it
     clipboardFilesWatcher = await watcher.subscribe(
       syncFolder,
@@ -478,13 +512,8 @@ const setIconFor5Seconds = (icon: ClipboardIcon) => {
   }, 5000);
 };
 
-const handleSendCheckBox = (checkBox: Electron.MenuItem) => {
-  config.set("send", checkBox.checked);
-  reload();
-};
-
-const handleReceiveCheckBox = (checkBox: Electron.MenuItem) => {
-  config.set("receive", checkBox.checked);
+const handleCheckBoxClick = (checkBox: Electron.MenuItem, key: string) => {
+  config.set(key, checkBox.checked);
   reload();
 };
 
@@ -561,17 +590,59 @@ const setContextMenu = () => {
   const menu = Menu.buildFromTemplate([
     {
       label: "Send",
-      type: "checkbox",
-      checked: config.get("send", true),
-      click: handleSendCheckBox,
-      toolTip: "Watch for new clipboards to send as files to the folder set",
+      type: "submenu",
+      toolTip: "Select what to send",
+      submenu: [
+        {
+          label: "Texts",
+          type: "checkbox",
+          checked: config.get("sendTexts", true),
+          click: (checkBox) => handleCheckBoxClick(checkBox, "sendTexts"),
+          toolTip: "Whether to enable sending copied texts or not",
+        },
+        {
+          label: "Images",
+          type: "checkbox",
+          checked: config.get("sendImages", true),
+          click: (checkBox) => handleCheckBoxClick(checkBox, "sendImages"),
+          toolTip: "Whether to enable sending copied images or not",
+        },
+        {
+          label: "Files",
+          type: "checkbox",
+          checked: config.get("sendFiles", true),
+          click: (checkBox) => handleCheckBoxClick(checkBox, "sendFiles"),
+          toolTip: "Whether to enable sending copied files or not",
+        },
+      ],
     },
     {
       label: "Receive",
-      type: "checkbox",
-      checked: config.get("receive", true),
-      click: handleReceiveCheckBox,
-      toolTip: "Watch for new files on the folder set to receive to clipboard",
+      type: "submenu",
+      toolTip: "Select what to receive",
+      submenu: [
+        {
+          label: "Texts",
+          type: "checkbox",
+          checked: config.get("receiveTexts", true),
+          click: (checkBox) => handleCheckBoxClick(checkBox, "receiveTexts"),
+          toolTip: "Whether to enable receiving texts or not",
+        },
+        {
+          label: "Images",
+          type: "checkbox",
+          checked: config.get("receiveImages", true),
+          click: (checkBox) => handleCheckBoxClick(checkBox, "receiveImages"),
+          toolTip: "Whether to enable receiving images or not",
+        },
+        {
+          label: "Files",
+          type: "checkbox",
+          checked: config.get("receiveFiles", true),
+          click: (checkBox) => handleCheckBoxClick(checkBox, "receiveFiles"),
+          toolTip: "Whether to enable receiving files or not",
+        },
+      ],
     },
     { type: "separator" },
     {
