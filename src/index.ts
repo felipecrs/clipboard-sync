@@ -298,7 +298,7 @@ const readClipboardFromFile = (file: string) => {
   if (
     isThereMoreThanOneClipboardFile(syncFolder) &&
     lastTimeWritten &&
-    currentFileTime <= lastTimeWritten
+    currentFileTime < lastTimeWritten
   ) {
     return;
   }
