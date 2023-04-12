@@ -15,7 +15,7 @@ import { exit } from "process";
 import { promisify } from "util";
 import clipboardEx = require("electron-clipboard-ex");
 import Store = require("electron-store");
-import chokidar = require("chokidar");
+import watcher = require("@parcel/watcher");
 import cron = require("node-cron");
 import os = require("os");
 import path = require("path");
@@ -77,7 +77,7 @@ let lastClipboardFilePathsRead: string[] = null;
 let lastTimeRead: number = null;
 
 let clipboardListener: ClipboardListener = null;
-let clipboardFilesWatcher: chokidar.FSWatcher = null;
+let clipboardFilesWatcher: watcher.AsyncSubscription = null;
 let filesCleanerTask: cron.ScheduledTask = null;
 let iconWaiter: NodeJS.Timeout = null;
 
@@ -577,7 +577,7 @@ const askForFolder = () => {
   }
 };
 
-const initialize = () => {
+const initialize = async () => {
   syncFolder = config.get("folder");
 
   if (!(typeof syncFolder === "string" || typeof syncFolder === "undefined")) {
@@ -603,12 +603,31 @@ const initialize = () => {
 
   if (config.get("receive", true)) {
     // Watches for files and reads clipboard from it
-    clipboardFilesWatcher = chokidar
-      .watch(syncFolder, {
-        ignoreInitial: true,
-        disableGlobbing: true,
-      })
-      .on("add", readClipboardFromFile);
+    clipboardFilesWatcher = await watcher.subscribe(
+      syncFolder,
+      (err, events) => {
+        // Execute readCLipboardFromFile only if there is a "create" event
+        if (err) {
+          console.error(err);
+          return;
+        }
+        // Call readClipboardFromFile for the last file created
+        const fileCreated = events
+          .filter((event) => event.type === "create")
+          .pop();
+
+        if (fileCreated) {
+          readClipboardFromFile(fileCreated.path);
+        }
+      },
+      {
+        // TODO: Add support for other platforms
+        backend: "windows",
+        // This filters out temporary files created by the OneDrive client, example:
+        // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt~RF1a1c3c.TMP"
+        ignore: ["**/*~*.TMP"],
+      }
+    );
   }
 
   if (config.get("autoCleanup", true)) {
@@ -627,7 +646,7 @@ const cleanup = () => {
   }
 
   if (clipboardFilesWatcher) {
-    clipboardFilesWatcher.close();
+    clipboardFilesWatcher.unsubscribe();
     clipboardFilesWatcher = null;
   }
 
