@@ -45,12 +45,12 @@
     "@types/node": "^18.15.11",
     "@types/node-cron": "^3.0.7",
     "@types/semver": "^7.3.13",
-    "electron": "^24.1.0",
+    "electron": "^24.1.1",
     "rimraf": "^5.0.0",
     "typescript": "^5.0.4"
   },
   "volta": {
-    "node": "18.15.0",
+    "node": "18.16.0",
     "npm": "9.6.4"
   }
 }
