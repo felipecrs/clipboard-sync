@@ -1,4 +1,3 @@
-import * as watcher from "@parcel/watcher";
 import {
   app,
   clipboard,
@@ -11,6 +10,7 @@ import {
 } from "electron";
 import * as clipboardEx from "electron-clipboard-ex";
 import * as Store from "electron-store";
+import * as chokidar from "chokidar";
 import * as cron from "node-cron";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -89,7 +89,7 @@ let lastClipboardFilePathsRead: string[] = null;
 let lastTimeRead: number = null;
 
 let clipboardListener: ClipboardListener = null;
-let clipboardFilesWatcher: watcher.AsyncSubscription = null;
+let clipboardFilesWatcher: chokidar.FSWatcher = null;
 let filesCleanerTask: cron.ScheduledTask = null;
 let iconWaiter: NodeJS.Timeout = null;
 
@@ -377,7 +377,7 @@ const askForFolder = () => {
   }
 };
 
-const initialize = async () => {
+const initialize = () => {
   syncFolder = config.get("folder");
 
   if (!(typeof syncFolder === "string" || typeof syncFolder === "undefined")) {
@@ -411,29 +411,12 @@ const initialize = async () => {
     config.get("receiveFiles", true)
   ) {
     // Watches for files and reads clipboard from it
-    clipboardFilesWatcher = await watcher.subscribe(
-      syncFolder,
-      (err, events) => {
-        // Execute readCLipboardFromFile only if there is a "create" event
-        if (err) {
-          console.error(err);
-          return;
-        }
-        // Call readClipboardFromFile for each "create" event
-        events.forEach((event) => {
-          if (event.type === "create") {
-            readClipboardFromFile(event.path);
-          }
-        });
-      },
-      {
-        // TODO: Add support for other platforms
-        backend: "windows",
-        // This filters out temporary files created by the OneDrive client, example:
-        // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt~RF1a1c3c.TMP"
-        ignore: ["**/*~*.TMP"],
-      }
-    );
+    clipboardFilesWatcher = chokidar
+      .watch(syncFolder, {
+        ignoreInitial: true,
+        disableGlobbing: true,
+      })
+      .on("add", readClipboardFromFile);
   }
 
   if (config.get("autoCleanup", true)) {
@@ -457,7 +440,7 @@ const cleanup = () => {
   }
 
   if (clipboardFilesWatcher) {
-    clipboardFilesWatcher.unsubscribe();
+    clipboardFilesWatcher.close();
     clipboardFilesWatcher = null;
   }
 
