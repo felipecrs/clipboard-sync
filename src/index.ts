@@ -1,4 +1,3 @@
-import * as watcher from "@parcel/watcher";
 import {
   app,
   clipboard,
@@ -15,6 +14,7 @@ import * as cron from "node-cron";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as semver from "semver";
+import * as fswin from "fswin";
 
 import {
   cleanFiles,
@@ -89,7 +89,7 @@ let lastClipboardFilePathsRead: string[] = null;
 let lastTimeRead: number = null;
 
 let clipboardListener: ClipboardListener = null;
-let clipboardFilesWatcher: watcher.AsyncSubscription = null;
+let clipboardFilesWatcher: fswin.dirWatcher = null;
 let filesCleanerTask: cron.ScheduledTask = null;
 let iconWaiter: NodeJS.Timeout = null;
 
@@ -411,27 +411,67 @@ const initialize = async () => {
     config.get("receiveFiles", true)
   ) {
     // Watches for files and reads clipboard from it
-    clipboardFilesWatcher = await watcher.subscribe(
+    clipboardFilesWatcher = new fswin.dirWatcher(
       syncFolder,
-      (err, events) => {
-        // Execute readCLipboardFromFile only if there is a "create" event
-        if (err) {
-          console.error(err);
-          return;
-        }
-        // Call readClipboardFromFile for each "create" event
-        events.forEach((event) => {
-          if (event.type === "create") {
-            readClipboardFromFile(event.path);
+      (event, message) => {
+        if (event === "STARTED") {
+          console.log(
+            'watcher started in: "' +
+              message +
+              '". the message is a full path. and it could be different from the path that you passed in, as symlink will resolve to its target.'
+          );
+        } else if (event === "MOVED") {
+          console.log(
+            'the directory you are watching is moved to "' +
+              message +
+              '". the message is a full path. just like the "STARTED" event'
+          );
+        } else if (event === "ADDED") {
+          console.log(
+            '"' + message + '" is added. it could be created or moved to here.'
+          );
+        } else if (event === "REMOVED") {
+          console.log(
+            '"' +
+              message +
+              '" is removed. it could be deleted or moved from here.'
+          );
+        } else if (event === "MODIFIED") {
+          console.log(
+            '"' +
+              message +
+              '" is modified. this event does not contain any detail of what change is made.'
+          );
+        } else if (event === "RENAMED") {
+          console.log('"' + message + '" is renamed.');
+        } else if (event === "ENDED") {
+          console.log(
+            "the watcher is about to quit. it is safe to set the watcher to null or any other value now."
+          );
+        } else if (event === "ERROR") {
+          if (message === "INITIALIZATION_FAILED") {
+            console.log(
+              "failed to initialize the watcher. any failure during the initialization may case this error. such as the path is inaccessible or nonexistent."
+            );
+          } else if (message === "UNABLE_TO_WATCH_SELF") {
+            console.log(
+              'failed to watch parent directory. it means the "MOVED" event will no longer fire.'
+            );
+          } else if (message === "UNABLE_TO_CONTINUE_WATCHING") {
+            console.log(
+              'some error makes the watcher stop working. perhaps the directory you are watching is deleted or becoming inaccessible. the "ENDED" event will fire after this error.'
+            );
           }
-        });
+        }
       },
       {
-        // TODO: Add support for other platforms
-        backend: "windows",
-        // This filters out temporary files created by the OneDrive client, example:
-        // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt~RF1a1c3c.TMP"
-        ignore: ["**/*~*.TMP"],
+        WATCH_SUB_DIRECTORIES: true, //watch the directory tree
+        CHANGE_FILE_SIZE: true, //watch file size changes, will fire in 'MODIFIED' event
+        CHANGE_LAST_WRITE: true, //watch last write time changes, will fire in 'MODIFIED' event
+        CHANGE_LAST_ACCESS: false, //watch last access time changes, will fire in 'MODIFIED' event
+        CHANGE_CREATION: false, //watch creation time changes, will fire in 'MODIFIED' event
+        CHANGE_ATTRIBUTES: false, //watch attributes changes, will fire in 'MODIFIED' event
+        CHANGE_SECURITY: false, //watch security changes, will fire in 'MODIFIED' event
       }
     );
   }
