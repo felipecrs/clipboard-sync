@@ -11,7 +11,8 @@
     "make": "tsc && electron-forge make",
     "publish": "tsc && electron-forge publish",
     "lint": "echo \"No linting configured\"",
-    "release": "npm run clean && electron-forge release"
+    "release": "npm run clean && electron-forge release",
+    "prepare": "bindl"
   },
   "keywords": [],
   "author": {
@@ -45,6 +46,7 @@
     "@types/node": "^18.17.11",
     "@types/node-cron": "^3.0.8",
     "@types/semver": "^7.5.0",
+    "bindl": "^4.1.6",
     "electron": "^26.1.0",
     "rimraf": "^5.0.1",
     "typescript": "^5.2.2"
