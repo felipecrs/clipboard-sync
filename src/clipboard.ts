@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as fswin from "fswin";
 
-import { hostName } from "./global";
+import { hostName, isReceivingFileNameSuffix } from "./global";
 import {
   deleteFileOrFolderRecursively,
   iterateThroughFilesRecursively,
@@ -130,7 +130,7 @@ export const isThereMoreThanOneClipboardFile = (syncFolder: string) => {
 };
 
 export const isIsReceivingFile = (file: string) => {
-  return file.endsWith(".is-receiving.txt");
+  return file.endsWith(isReceivingFileNameSuffix);
 };
 
 // Unsyncs from-others files older than 1 minute,
@@ -156,7 +156,9 @@ export const cleanFiles = (syncFolder: string) => {
       // Check if it's a file used by previous versions.
       const match = path
         .parse(filePath)
-        .base.match(/^((0|[1-9][0-9]*)|(receiving))-([0-9a-zA-Z-]+)\.txt$/);
+        .base.match(
+          /^((0|[1-9][0-9]*)|(receiving))-([0-9a-zA-Z-]+)(\.is-reading)?\.txt$/
+        );
       if (match) {
         console.log(`Deleting file used by previous versions: ${filePath}`);
         deleteFileOrFolderRecursively(filePath);
