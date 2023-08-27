@@ -1,10 +1,8 @@
 {
+  "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
+  "include": ["electron.vite.config.*", "src/main/*", "src/preload/*"],
   "compilerOptions": {
-    "module": "CommonJS",
-    "outDir": "lib",
-    "sourceMap": true,
-    "target": "ES6",
-    "noImplicitAny": true
-  },
-  "include": ["src"]
+    "composite": true,
+    "types": ["electron-vite/node"]
+  }
 }
