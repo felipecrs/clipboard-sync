@@ -96,6 +96,23 @@ let iconWaiter: NodeJS.Timeout = null;
 let lastTimeChecked: number = null;
 
 const writeClipboardToFile = () => {
+  // Avoids sending the clipboard if there is no other computer receiving
+  if (
+    fs
+      .readdirSync(syncFolder)
+      .filter(
+        (file) =>
+          file.startsWith("receiving-") &&
+          file.endsWith(".txt") &&
+          file !== `receiving-${hostname}.txt`
+      ).length === 0
+  ) {
+    console.log(
+      "No other computer is receiving clipboards. Skipping clipboard send..."
+    );
+    return;
+  }
+
   // Prevents duplicated clipboard events
   const currentTime = Date.now();
   if (lastTimeChecked && currentTime - lastTimeChecked < 1000) {
@@ -417,6 +434,9 @@ const initialize = () => {
         disableGlobbing: true,
       })
       .on("add", readClipboardFromFile);
+
+    // Create a file to indicate that this computer is receiving clipboards
+    fs.writeFileSync(path.join(syncFolder, `receiving-${hostname}.txt`), "");
   }
 
   if (config.get("autoCleanup", true)) {
@@ -434,6 +454,11 @@ const initialize = () => {
 };
 
 const cleanup = () => {
+  // Deletes the file that indicates that this computer is receiving clipboards
+  fs.rmSync(path.join(syncFolder, `receiving-${hostname}.txt`), {
+    force: true,
+  });
+
   if (clipboardListener) {
     clipboardListener.stopListening();
     clipboardListener = null;
