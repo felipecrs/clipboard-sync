@@ -9,9 +9,7 @@
     "start": "tsc && electron-forge start",
     "package": "tsc && electron-forge package",
     "make": "tsc && electron-forge make",
-    "publish": "tsc && electron-forge publish",
     "lint": "echo \"No linting configured\"",
-    "release": "npm run clean && electron-forge release",
     "prepare": "bindl"
   },
   "keywords": [],
@@ -37,11 +35,7 @@
   },
   "devDependencies": {
     "@electron-forge/cli": "^6.4.1",
-    "@electron-forge/maker-deb": "^6.4.1",
-    "@electron-forge/maker-rpm": "^6.4.1",
     "@electron-forge/maker-squirrel": "^6.4.1",
-    "@electron-forge/maker-zip": "^6.4.1",
-    "@electron-forge/publisher-github": "^6.4.1",
     "@types/follow-redirects": "^1.14.1",
     "@types/node": "^18.17.11",
     "@types/node-cron": "^3.0.8",

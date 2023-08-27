@@ -27,28 +27,5 @@ module.exports = {
         iconUrl: getAppIcon(),
       },
     },
-    {
-      name: "@electron-forge/maker-zip",
-      platforms: ["darwin"],
-    },
-    {
-      name: "@electron-forge/maker-deb",
-      config: {},
-    },
-    {
-      name: "@electron-forge/maker-rpm",
-      config: {},
-    },
-  ],
-  publishers: [
-    {
-      name: "@electron-forge/publisher-github",
-      config: {
-        repository: {
-          owner: "felipecrs",
-          name: "clipboard-sync",
-        },
-      },
-    },
   ],
 };
