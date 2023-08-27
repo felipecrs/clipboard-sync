@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as fswin from "fswin";
 
-import { hostname } from "./global";
+import { hostName } from "./global";
 import { deleteFolderRecursive, iterateThroughFilesRecursively } from "./utils";
 
 // returns 0 if not valid
@@ -27,12 +27,12 @@ export const getItemNumber = (
     if (match) {
       switch (filter) {
         case "from-myself":
-          if (match[2] === hostname) {
+          if (match[2] === hostName) {
             itemNumber = parseInt(match[1]);
           }
           break;
         case "from-others":
-          if (match[2] !== hostname) {
+          if (match[2] !== hostName) {
             itemNumber = parseInt(match[1]);
           }
           break;
@@ -48,12 +48,12 @@ export const getItemNumber = (
     if (match) {
       switch (filter) {
         case "from-myself":
-          if (match[2] === hostname) {
+          if (match[2] === hostName) {
             itemNumber = parseInt(match[1]);
           }
           break;
         case "from-others":
-          if (match[2] !== hostname) {
+          if (match[2] !== hostName) {
             itemNumber = parseInt(match[1]);
           }
           break;
@@ -68,13 +68,14 @@ export const getItemNumber = (
 
 export const getNextWriteTime = (syncFolder: string) => {
   const numbers: number[] = [];
-  fs.readdirSync(syncFolder).forEach((file) => {
-    file = path.join(syncFolder, file);
-    const itemNumber = getItemNumber(file);
+  const files = fs.readdirSync(syncFolder);
+  for (const file of files) {
+    const filePath = path.join(syncFolder, file);
+    const itemNumber = getItemNumber(filePath);
     if (itemNumber) {
       numbers.push(itemNumber);
     }
-  });
+  }
   if (numbers.length > 0) {
     // https://stackoverflow.com/a/1063027/12156188
     return (
@@ -90,29 +91,41 @@ export const getNextWriteTime = (syncFolder: string) => {
 
 export const isThereMoreThanOneClipboardFile = (syncFolder: string) => {
   let found = 0;
-  fs.readdirSync(syncFolder).forEach((file) => {
-    file = path.join(syncFolder, file);
-    const itemNumber = getItemNumber(file);
+  const files = fs.readdirSync(syncFolder);
+  for (const file of files) {
+    const filePath = path.join(syncFolder, file);
+    const itemNumber = getItemNumber(filePath);
     if (itemNumber) {
       found++;
       if (found > 1) {
         return;
       }
     }
-  });
+  }
   return found > 1;
 };
 
-// Removes from-myself files older than 5 minutes,
+export const isIsReceivingFile = (file: string) => {
+  return file.endsWith(".is-receiving.txt");
+};
+
 // Unsyncs from-others files older than 1 minute,
+// Removes from-myself files older than 5 minutes,
 // And removes from-others files older than 10 minutes.
 export const cleanFiles = (syncFolder: string) => {
   const now = Date.now();
   const currentTimeMinus1Min = now - 60000;
   const currentTimeMinus5Min = now - 300000;
   const currentTimeMinus10Min = now - 600000;
-  fs.readdirSync(syncFolder).forEach((file) => {
+  const files = fs.readdirSync(syncFolder);
+  for (const file of files) {
     const filePath = path.join(syncFolder, file);
+
+    // These files will be deleted at application finish.
+    if (isIsReceivingFile(filePath)) {
+      break;
+    }
+
     if (getItemNumber(filePath, "from-myself")) {
       const fileStat = fs.statSync(filePath);
       if (fileStat.ctime.getTime() <= currentTimeMinus5Min) {
@@ -136,7 +149,7 @@ export const cleanFiles = (syncFolder: string) => {
         }
       }
     }
-  });
+  }
 };
 
 export const unsyncFileOrFolderRecursively = (fileOrFolder: string) => {
