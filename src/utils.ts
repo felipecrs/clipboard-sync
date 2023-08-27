@@ -20,17 +20,19 @@ export const iterateThroughFilesRecursively = (
   fn: (arg0: string) => unknown
 ): unknown[] => {
   const results: unknown[] = [];
-  paths.forEach((fileOrFolder) => {
+  for (const fileOrFolder of paths) {
     if (fs.existsSync(fileOrFolder)) {
       if (fs.statSync(fileOrFolder).isDirectory()) {
-        fs.readdirSync(fileOrFolder).forEach((file) => {
+        const files = fs.readdirSync(fileOrFolder);
+        for (const file of files) {
           const filePath = path.join(fileOrFolder, file);
-          iterateThroughFilesRecursively([filePath], fn).forEach((result) => {
+          const results = iterateThroughFilesRecursively([filePath], fn);
+          for (const result of results) {
             if (result) {
               results.push(result);
             }
-          });
-        });
+          }
+        }
       } else {
         const result = fn(fileOrFolder);
         if (result) {
@@ -38,7 +40,7 @@ export const iterateThroughFilesRecursively = (
         }
       }
     }
-  });
+  }
   return results;
 };
 
@@ -52,13 +54,14 @@ export const getTotalNumberOfFiles = (paths: string[]): number => {
 
 export const getFilesSizeInMb = (paths: string[]) => {
   let totalSize = 0;
-  iterateThroughFilesRecursively(paths, (file) => {
+  const results = iterateThroughFilesRecursively(paths, (file) => {
     return fs.lstatSync(file).size / (1024 * 1024);
-  }).forEach((size) => {
+  });
+  for (const size of results) {
     if (typeof size === "number") {
       totalSize += size;
     }
-  });
+  }
 
   return totalSize;
 };
@@ -66,7 +69,8 @@ export const getFilesSizeInMb = (paths: string[]) => {
 // https://stackoverflow.com/a/32197381/12156188
 export const deleteFolderRecursive = (directoryPath: string) => {
   if (fs.existsSync(directoryPath)) {
-    fs.readdirSync(directoryPath).forEach((file, index) => {
+    const files = fs.readdirSync(directoryPath);
+    for (const file of files) {
       const curPath = path.join(directoryPath, file);
       if (fs.lstatSync(curPath).isDirectory()) {
         // recurse
@@ -75,14 +79,15 @@ export const deleteFolderRecursive = (directoryPath: string) => {
         // delete file
         fs.unlinkSync(curPath);
       }
-    });
+    }
     fs.rmdirSync(directoryPath);
   }
 };
 
 export const copyFolderRecursive = (source: string, destination: string) => {
   fs.mkdirSync(destination);
-  fs.readdirSync(source).forEach((file, index) => {
+  const files = fs.readdirSync(source);
+  for (const file of files) {
     const curPath = path.join(source, file);
     const fullDestination = path.join(destination, path.basename(curPath));
     if (fs.lstatSync(curPath).isDirectory()) {
@@ -92,7 +97,7 @@ export const copyFolderRecursive = (source: string, destination: string) => {
       // copy file
       fs.copyFileSync(curPath, fullDestination);
     }
-  });
+  }
 };
 
 export const calculateSha256 = (data: Buffer) => {

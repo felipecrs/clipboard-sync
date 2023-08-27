@@ -21,8 +21,9 @@ import {
   getItemNumber,
   getNextWriteTime,
   isThereMoreThanOneClipboardFile,
+  isIsReceivingFile,
 } from "./clipboard";
-import { hostname } from "./global";
+import { hostName, hostNameIsReceivingFileName } from "./global";
 import {
   calculateSha256,
   copyFolderRecursive,
@@ -102,9 +103,7 @@ const writeClipboardToFile = () => {
       .readdirSync(syncFolder)
       .filter(
         (file) =>
-          file.startsWith("receiving-") &&
-          file.endsWith(".txt") &&
-          file !== `receiving-${hostname}.txt`
+          isIsReceivingFile(file) && file !== hostNameIsReceivingFileName
       ).length === 0
   ) {
     console.log(
@@ -192,21 +191,21 @@ const writeClipboardToFile = () => {
   const writeTime = getNextWriteTime(syncFolder);
   let destinationPath: string;
   if (clipboardType === "text") {
-    destinationPath = path.join(syncFolder, `${writeTime}-${hostname}.txt`);
+    destinationPath = path.join(syncFolder, `${writeTime}-${hostName}.txt`);
     fs.writeFileSync(destinationPath, clipboardText, {
       encoding: "utf8",
     });
   } else if (clipboardType === "image") {
-    destinationPath = path.join(syncFolder, `${writeTime}-${hostname}.png`);
+    destinationPath = path.join(syncFolder, `${writeTime}-${hostName}.png`);
     fs.writeFileSync(destinationPath, clipboardImage);
   } else if (clipboardType === "files") {
     clipboardFilesCount = getTotalNumberOfFiles(clipboardFilePaths);
     destinationPath = path.join(
       syncFolder,
-      `${writeTime}-${hostname}.${clipboardFilesCount}_files`
+      `${writeTime}-${hostName}.${clipboardFilesCount}_files`
     );
     fs.mkdirSync(destinationPath);
-    clipboardFilePaths.forEach((filePath: string) => {
+    for (const filePath of clipboardFilePaths) {
       const fullDestination = path.join(
         destinationPath,
         path.basename(filePath)
@@ -216,7 +215,7 @@ const writeClipboardToFile = () => {
       } else {
         fs.copyFileSync(filePath, fullDestination);
       }
-    });
+    }
   }
   console.log(`Clipboard written to ${destinationPath}`);
   lastTimeWritten = writeTime;
@@ -436,14 +435,13 @@ const initialize = async () => {
           return;
         }
         // Execute readCLipboardFromFile only if there is a "create" event
-        events.forEach((event) => {
+        for (const event of events) {
           if (event.type === "create") {
             readClipboardFromFile(event.path);
           }
-        });
+        }
       },
       {
-        // TODO: Add support for other platforms
         backend: "watchman",
         // This filters out temporary files created by the OneDrive client, example:
         // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt~RF1a1c3c.TMP"
@@ -452,7 +450,7 @@ const initialize = async () => {
     );
 
     // Create a file to indicate that this computer is receiving clipboards
-    fs.writeFileSync(path.join(syncFolder, `receiving-${hostname}.txt`), "");
+    fs.writeFileSync(path.join(syncFolder, hostNameIsReceivingFileName), "");
   }
 
   if (config.get("autoCleanup", true)) {
@@ -471,7 +469,7 @@ const initialize = async () => {
 
 const cleanup = () => {
   // Deletes the file that indicates that this computer is receiving clipboards
-  fs.rmSync(path.join(syncFolder, `receiving-${hostname}.txt`), {
+  fs.rmSync(path.join(syncFolder, hostNameIsReceivingFileName), {
     force: true,
   });
 
@@ -674,7 +672,7 @@ const setContextMenu = () => {
       type: "checkbox",
       checked: config.get("autoCleanup", true),
       click: handleCleanupCheckBox,
-      toolTip: `Auto-clean the files created by ${app.name} older than 5 minutes, on every 5 minutes`,
+      toolTip: `Auto-clean the files created by ${app.name}`,
     },
     {
       label: "Auto-start on login",

@@ -1,3 +1,4 @@
 import * as os from "node:os";
 
-export const hostname = os.hostname();
+export const hostName = os.hostname();
+export const hostNameIsReceivingFileName = `${hostName}.is-reading.txt`;
