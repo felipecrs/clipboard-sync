@@ -10,7 +10,7 @@ import {
 } from "electron";
 import * as clipboardEx from "electron-clipboard-ex";
 import * as Store from "electron-store";
-import * as chokidar from "chokidar";
+import * as watcher from "@parcel/watcher";
 import * as cron from "node-cron";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -89,7 +89,7 @@ let lastClipboardFilePathsRead: string[] = null;
 let lastTimeRead: number = null;
 
 let clipboardListener: ClipboardListener = null;
-let clipboardFilesWatcher: chokidar.FSWatcher = null;
+let clipboardFilesWatcher: watcher.AsyncSubscription = null;
 let filesCleanerTask: cron.ScheduledTask = null;
 let iconWaiter: NodeJS.Timeout = null;
 
@@ -394,7 +394,7 @@ const askForFolder = () => {
   }
 };
 
-const initialize = () => {
+const initialize = async () => {
   syncFolder = config.get("folder");
 
   if (!(typeof syncFolder === "string" || typeof syncFolder === "undefined")) {
@@ -428,12 +428,28 @@ const initialize = () => {
     config.get("receiveFiles", true)
   ) {
     // Watches for files and reads clipboard from it
-    clipboardFilesWatcher = chokidar
-      .watch(syncFolder, {
-        ignoreInitial: true,
-        disableGlobbing: true,
-      })
-      .on("add", readClipboardFromFile);
+    clipboardFilesWatcher = await watcher.subscribe(
+      syncFolder,
+      (err, events) => {
+        if (err) {
+          console.error(err);
+          return;
+        }
+        // Execute readCLipboardFromFile only if there is a "create" event
+        events.forEach((event) => {
+          if (event.type === "create") {
+            readClipboardFromFile(event.path);
+          }
+        });
+      },
+      {
+        // TODO: Add support for other platforms
+        backend: "windows",
+        // This filters out temporary files created by the OneDrive client, example:
+        // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt~RF1a1c3c.TMP"
+        ignore: ["**/*~*.TMP"],
+      }
+    );
 
     // Create a file to indicate that this computer is receiving clipboards
     fs.writeFileSync(path.join(syncFolder, `receiving-${hostname}.txt`), "");
@@ -465,7 +481,7 @@ const cleanup = () => {
   }
 
   if (clipboardFilesWatcher) {
-    clipboardFilesWatcher.close();
+    clipboardFilesWatcher.unsubscribe();
     clipboardFilesWatcher = null;
   }
 
