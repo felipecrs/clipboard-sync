@@ -444,7 +444,7 @@ const initialize = async () => {
       },
       {
         // TODO: Add support for other platforms
-        backend: "windows",
+        backend: "watchman",
         // This filters out temporary files created by the OneDrive client, example:
         // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt~RF1a1c3c.TMP"
         ignore: ["**/*~*.TMP"],
@@ -733,6 +733,16 @@ const createAppIcon = () => {
   appIcon.on("double-click", () => {
     shell.openPath(syncFolder);
   });
+
+  // Set PATH to include bundled watchman binaries
+  const watchmanBinDir = path.resolve(
+    path.join(
+      __dirname,
+      "../binaries/win32/x64/watchman-v2023.08.07.00-windows/bin"
+    )
+  );
+
+  process.env.PATH = `${process.env.PATH};${watchmanBinDir}`;
 
   initialize();
 
