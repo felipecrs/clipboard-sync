@@ -18,10 +18,14 @@ import * as semver from "semver";
 
 import {
   cleanFiles,
-  getItemNumber,
+  parseClipboardFileName,
   getNextWriteTime,
   isThereMoreThanOneClipboardFile,
   isIsReceivingFile,
+  ClipboardType,
+  ClipboardText,
+  isClipboardTextEquals,
+  isClipboardTextEmpty,
 } from "./clipboard";
 import { hostName, hostNameIsReceivingFileName } from "./global";
 import {
@@ -63,8 +67,6 @@ type ClipboardListener = {
 
 type ClipboardIcon = "clipboard" | "clipboard_sent" | "clipboard_received";
 
-type ClipboardType = "text" | "image" | "files";
-
 const config = new Store<ConfigType>({
   defaults: {
     sendTexts: true,
@@ -84,7 +86,7 @@ let syncFolder: string = null;
 
 let lastTimeWritten: number = null;
 
-let lastTextRead: string = null;
+let lastTextRead: ClipboardText = null;
 let lastImageSha256Read: string = null;
 let lastClipboardFilePathsRead: string[] = null;
 let lastTimeRead: number = null;
@@ -106,7 +108,7 @@ const writeClipboardToFile = () => {
           isIsReceivingFile(file) && file !== hostNameIsReceivingFileName
       ).length === 0
   ) {
-    console.log(
+    console.error(
       "No other computer is receiving clipboards. Skipping clipboard send..."
     );
     return;
@@ -120,7 +122,7 @@ const writeClipboardToFile = () => {
   lastTimeChecked = currentTime;
 
   let clipboardType: ClipboardType;
-  let clipboardText: string;
+  let clipboardText: ClipboardText;
   let clipboardImage: Buffer;
   let clipboardImageSha256: string;
   let clipboardFilePaths: string[];
@@ -128,11 +130,24 @@ const writeClipboardToFile = () => {
   const clipboardFormats = clipboard.availableFormats();
 
   try {
-    if (clipboardFormats.includes("text/plain")) {
+    if (
+      clipboardFormats.includes("text/plain") ||
+      clipboardFormats.includes("text/html") ||
+      clipboardFormats.includes("text/rtf")
+    ) {
       if (!config.get("sendTexts", true)) {
         return;
       }
-      clipboardText = clipboard.readText();
+      clipboardText = {};
+      if (clipboardFormats.includes("text/plain")) {
+        clipboardText.text = clipboard.readText() ?? undefined;
+      }
+      if (clipboardFormats.includes("text/html")) {
+        clipboardText.html = clipboard.readHTML() ?? undefined;
+      }
+      if (clipboardFormats.includes("text/rtf")) {
+        clipboardText.rtf = clipboard.readRTF() ?? undefined;
+      }
       clipboardType = "text";
     } else if (clipboardFormats.includes("image/png")) {
       if (!config.get("sendImages", true)) {
@@ -159,10 +174,10 @@ const writeClipboardToFile = () => {
   // Prevent sending the clipboard that was just received
   if (
     clipboardType === "text" &&
-    (!clipboardText ||
+    (isClipboardTextEmpty(clipboardText) ||
       (lastTimeRead &&
         currentTime - lastTimeRead < 5000 &&
-        lastTextRead === clipboardText))
+        isClipboardTextEquals(lastTextRead, clipboardText)))
   ) {
     return;
   }
@@ -191,8 +206,11 @@ const writeClipboardToFile = () => {
   const writeTime = getNextWriteTime(syncFolder);
   let destinationPath: string;
   if (clipboardType === "text") {
-    destinationPath = path.join(syncFolder, `${writeTime}-${hostName}.txt`);
-    fs.writeFileSync(destinationPath, clipboardText, {
+    destinationPath = path.join(
+      syncFolder,
+      `${writeTime}-${hostName}.text.json`
+    );
+    fs.writeFileSync(destinationPath, JSON.stringify(clipboardText, null, 2), {
       encoding: "utf8",
     });
   } else if (clipboardType === "image") {
@@ -226,26 +244,17 @@ const writeClipboardToFile = () => {
 const readClipboardFromFile = (file: string) => {
   const currentTime = Date.now();
 
-  const filename = path.relative(syncFolder, file).split(path.sep)[0];
-  file = path.join(syncFolder, filename);
-
-  const currentFileTime = getItemNumber(file, "from-others");
-  if (!currentFileTime) {
+  const parsedFile = parseClipboardFileName(file, "from-others");
+  if (!parsedFile) {
+    if (!isIsReceivingFile(file)) {
+      console.error(`Unrecognized file: ${file}`);
+    }
     return;
   }
+  const currentFileTime = parsedFile.number;
+  const fileClipboardType = parsedFile.clipboardType;
 
-  const fileName = path.parse(file).name;
-  const fileExtension = path.parse(file).ext;
-  const fileClipboardType =
-    fileExtension === ".txt"
-      ? "text"
-      : fileExtension === ".png"
-      ? "image"
-      : fileExtension.endsWith("_files")
-      ? "files"
-      : null;
-
-  let currentText: string;
+  let currentText: ClipboardText;
   let currentImage: Buffer;
   let currentClipboardType: ClipboardType;
   let currentImageSha256: string;
@@ -253,8 +262,21 @@ const readClipboardFromFile = (file: string) => {
 
   const clipboardFormats = clipboard.availableFormats();
   try {
-    if (clipboardFormats.includes("text/plain")) {
-      currentText = clipboard.readText();
+    if (
+      clipboardFormats.includes("text/plain") ||
+      clipboardFormats.includes("text/html") ||
+      clipboardFormats.includes("text/rtf")
+    ) {
+      currentText = {};
+      if (clipboardFormats.includes("text/plain")) {
+        currentText.text = clipboard.readText() ?? undefined;
+      }
+      if (clipboardFormats.includes("text/html")) {
+        currentText.html = clipboard.readHTML() ?? undefined;
+      }
+      if (clipboardFormats.includes("text/rtf")) {
+        currentText.rtf = clipboard.readRTF() ?? undefined;
+      }
       currentClipboardType = "text";
     } else if (clipboardFormats.includes("image/png")) {
       currentImage = clipboard.readImage().toPNG();
@@ -266,9 +288,10 @@ const readClipboardFromFile = (file: string) => {
     }
   } catch (error) {
     console.error("Error reading current clipboard");
+    return;
   }
 
-  let newText: string;
+  let newText: ClipboardText;
   let newImage: Buffer;
   let newImageSha256: string;
   let newFilePaths: string[];
@@ -278,9 +301,11 @@ const readClipboardFromFile = (file: string) => {
       if (!config.get("receiveTexts", true)) {
         return;
       }
-      newText = fs.readFileSync(file, {
-        encoding: "utf8",
-      });
+      newText = JSON.parse(
+        fs.readFileSync(file, {
+          encoding: "utf8",
+        })
+      );
     } else if (fileClipboardType === "image") {
       if (!config.get("receiveImages", true)) {
         return;
@@ -291,11 +316,11 @@ const readClipboardFromFile = (file: string) => {
       if (!config.get("receiveFiles", true)) {
         return;
       }
-      const matches = fileExtension.match(/^\.(0|[1-9][0-9]*)_files$/);
-      if (matches && matches.length > 0) {
-        newFilesCount = parseInt(matches[1]);
-      } else {
-        console.error("Unrecognized _files folder, missing files count.");
+      newFilesCount = parsedFile.filesCount;
+      if (!newFilesCount) {
+        console.error(
+          `Could not read the number of files in ${file}. Skipping...`
+        );
         return;
       }
       newFilePaths = fs
@@ -310,14 +335,15 @@ const readClipboardFromFile = (file: string) => {
       }
     }
   } catch (error) {
-    console.error(`Error reading clipboard from file ${fileName}`);
+    console.error(`Error reading clipboard from file ${file}`);
     return;
   }
 
   if (currentClipboardType === fileClipboardType) {
     if (
       currentClipboardType === "text" &&
-      (!newText || currentText === newText)
+      (isClipboardTextEmpty(newText) ||
+        isClipboardTextEquals(currentText, newText))
     ) {
       // Prevents writing duplicated text to clipboard
       return;
@@ -346,7 +372,7 @@ const readClipboardFromFile = (file: string) => {
   }
 
   if (fileClipboardType === "text") {
-    clipboard.writeText(newText);
+    clipboard.write(newText);
     lastTextRead = newText;
   } else if (fileClipboardType === "image") {
     clipboard.writeImage(nativeImage.createFromBuffer(newImage));
@@ -418,7 +444,11 @@ const initialize = async () => {
   ) {
     clipboardListener = require("clipboard-event");
     clipboardListener.startListening();
-    clipboardListener.on("change", writeClipboardToFile);
+    clipboardListener.on(
+      "change",
+      // Wait 100ms so that clipboard is fully written
+      () => setTimeout(writeClipboardToFile, 100)
+    );
   }
 
   if (

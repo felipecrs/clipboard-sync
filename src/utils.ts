@@ -67,20 +67,20 @@ export const getFilesSizeInMb = (paths: string[]) => {
 };
 
 // https://stackoverflow.com/a/32197381/12156188
-export const deleteFolderRecursive = (directoryPath: string) => {
-  if (fs.existsSync(directoryPath)) {
-    const files = fs.readdirSync(directoryPath);
-    for (const file of files) {
-      const curPath = path.join(directoryPath, file);
-      if (fs.lstatSync(curPath).isDirectory()) {
+export const deleteFileOrFolderRecursively = (fileOrFolder: string) => {
+  if (fs.existsSync(fileOrFolder)) {
+    if (fs.lstatSync(fileOrFolder).isDirectory()) {
+      const files = fs.readdirSync(fileOrFolder);
+      for (const file of files) {
+        const filePath = path.join(fileOrFolder, file);
         // recurse
-        deleteFolderRecursive(curPath);
-      } else {
-        // delete file
-        fs.unlinkSync(curPath);
+        deleteFileOrFolderRecursively(filePath);
       }
+      fs.rmdirSync(fileOrFolder);
+    } else {
+      // delete file
+      fs.unlinkSync(fileOrFolder);
     }
-    fs.rmdirSync(directoryPath);
   }
 };
 
