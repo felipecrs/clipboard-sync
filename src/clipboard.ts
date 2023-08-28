@@ -157,7 +157,7 @@ export const cleanFiles = (syncFolder: string) => {
       const match = path
         .parse(filePath)
         .base.match(
-          /^((0|[1-9][0-9]*)|(receiving))-([0-9a-zA-Z-]+)(\.is-reading)?\.txt$/
+          /^((0|[1-9][0-9]*)-[0-9a-zA-Z-]+\.txt)|(receiving-[0-9a-zA-Z-]+\.txt)|([0-9a-zA-Z-]+\.is-reading\.txt)$/
         );
       if (match) {
         console.log(`Deleting file used by previous versions: ${filePath}`);
