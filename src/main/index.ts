@@ -541,7 +541,7 @@ const getAppIcon = () => {
 
   return path.resolve(
     __dirname,
-    `../assets/appicons/${iconExtension}/icon.${iconExtension}`
+    `../../resources/appicons/${iconExtension}/icon.${iconExtension}`
   );
 };
 
@@ -550,7 +550,7 @@ const getTrayIcon = (icon: ClipboardIcon) => {
 
   return path.resolve(
     __dirname,
-    `../assets/trayicons/${iconExtension}/${icon}.${iconExtension}`
+    `../../resources/trayicons/${iconExtension}/${icon}.${iconExtension}`
   );
 };
 
@@ -771,7 +771,7 @@ const createAppIcon = () => {
   const watchmanBinDir = path.resolve(
     path.join(
       __dirname,
-      "../binaries/win32/x64/watchman-v2023.08.07.00-windows/bin"
+      "../../resources/binaries/win32/x64/watchman-v2023.08.07.00-windows/bin"
     )
   );
 

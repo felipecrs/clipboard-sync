@@ -10,7 +10,7 @@ const getAppIcon = () => {
 
   return path.resolve(
     __dirname,
-    `./assets/appicons/${iconExtension}/icon.${iconExtension}`
+    `./resources/appicons/${iconExtension}/icon.${iconExtension}`
   );
 };
 
