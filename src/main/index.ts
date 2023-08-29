@@ -771,7 +771,7 @@ const createAppIcon = () => {
   const watchmanBinDir = path.resolve(
     path.join(
       __dirname,
-      "../../resources/binaries/win32/x64/watchman-v2023.08.07.00-windows/bin"
+      `../../resources/binaries/${process.platform}/${process.arch}/watchman`
     )
   );
 
