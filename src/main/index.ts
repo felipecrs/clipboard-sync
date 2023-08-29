@@ -8,9 +8,9 @@ import {
   shell,
   Tray,
 } from "electron";
-import * as clipboardEx from "electron-clipboard-ex";
-import * as Store from "electron-store";
-import * as watcher from "@parcel/watcher";
+
+import Store from "electron-store";
+import watcher from "@parcel/watcher";
 import * as cron from "node-cron";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -26,6 +26,9 @@ import {
   ClipboardText,
   isClipboardTextEquals,
   isClipboardTextEmpty,
+  ClipboardFile,
+  ClipboardFiles,
+  ClipboardImage,
 } from "./clipboard";
 import { hostName, hostNameIsReceivingFileName } from "./global";
 import {
@@ -34,7 +37,6 @@ import {
   getFilesSizeInMb,
   getRedirectedUrl,
   getTotalNumberOfFiles,
-  isArrayEquals,
 } from "./utils";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -79,26 +81,32 @@ const config = new Store<ConfigType>({
   },
 });
 
-let appIcon: Tray = null;
+let appIcon: Tray | null = null;
 let firstTime = true;
 
-let syncFolder: string = null;
+let syncFolder: string | null = null;
 
-let lastTimeWritten: number = null;
+let lastTimeWritten: number | null = null;
 
-let lastTextRead: ClipboardText = null;
-let lastImageSha256Read: string = null;
-let lastClipboardFilePathsRead: string[] = null;
-let lastTimeRead: number = null;
+let lastTextRead: ClipboardText | null = null;
+let lastImageSha256Read: string | null = null;
+let lastClipboardFilePathsRead: string[] | null = null;
+let lastTimeRead: number | null = null;
 
-let clipboardListener: ClipboardListener = null;
-let clipboardFilesWatcher: watcher.AsyncSubscription = null;
-let filesCleanerTask: cron.ScheduledTask = null;
-let iconWaiter: NodeJS.Timeout = null;
+let clipboardListener: ClipboardListener | null = null;
+let clipboardFilesWatcher: watcher.AsyncSubscription | null = null;
+let filesCleanerTask: cron.ScheduledTask | null = null;
+let iconWaiter: NodeJS.Timeout | null = null;
 
-let lastTimeChecked: number = null;
+let lastTimeChecked: number | null = null;
 
 const writeClipboardToFile = () => {
+  if (!syncFolder) {
+    // This should never happen
+    console.error("Sync folder is not defined. Skipping clipboard send...");
+    return;
+  }
+
   // Avoids sending the clipboard if there is no other computer receiving
   if (
     fs
@@ -122,11 +130,12 @@ const writeClipboardToFile = () => {
   lastTimeChecked = currentTime;
 
   let clipboardType: ClipboardType;
-  let clipboardText: ClipboardText;
-  let clipboardImage: Buffer;
-  let clipboardImageSha256: string;
-  let clipboardFilePaths: string[];
+  let clipboardText: ClipboardText | undefined;
+  let clipboardImage: Buffer | undefined;
+  let clipboardImageSha256: string | undefined;
+  let clipboardFilePaths: string[] | undefined;
   let clipboardFilesCount: number;
+
   const clipboardFormats = clipboard.availableFormats();
 
   try {
@@ -138,69 +147,85 @@ const writeClipboardToFile = () => {
       if (!config.get("sendTexts", true)) {
         return;
       }
-      clipboardText = {};
-      if (clipboardFormats.includes("text/plain")) {
-        clipboardText.text = clipboard.readText() ?? undefined;
-      }
-      if (clipboardFormats.includes("text/html")) {
-        clipboardText.html = clipboard.readHTML() ?? undefined;
-      }
-      if (clipboardFormats.includes("text/rtf")) {
-        clipboardText.rtf = clipboard.readRTF() ?? undefined;
-      }
       clipboardType = "text";
+      clipboardText = {
+        text: clipboardFormats.includes("text/plain")
+          ? clipboard.readText()
+          : undefined,
+        html: clipboardFormats.includes("text/html")
+          ? clipboard.readHTML()
+          : undefined,
+        rtf: clipboardFormats.includes("text/rtf")
+          ? clipboard.readRTF()
+          : undefined,
+      };
     } else if (clipboardFormats.includes("image/png")) {
       if (!config.get("sendImages", true)) {
         return;
       }
+      clipboardType = "image";
       clipboardImage = clipboard.readImage().toPNG();
       clipboardImageSha256 = calculateSha256(clipboardImage);
-      clipboardType = "image";
     } else if (clipboardFormats.includes("text/uri-list")) {
       if (!config.get("sendFiles", true)) {
         return;
       }
-      clipboardFilePaths = clipboardEx.readFilePaths();
       clipboardType = "files";
+      clipboardFilePaths = clipboardEx.readFilePaths();
+    } else {
+      console.error(
+        "Clipboard format was not recognized. Skipping clipboard send..."
+      );
+      return;
     }
   } catch (error) {
-    console.error("Error reading current clipboard");
-  }
-
-  if (!clipboardType) {
+    console.error("Cannot read current clipboard, skipping clipboard send...");
     return;
   }
 
   // Prevent sending the clipboard that was just received
-  if (
-    clipboardType === "text" &&
-    (isClipboardTextEmpty(clipboardText) ||
-      (lastTimeRead &&
-        currentTime - lastTimeRead < 5000 &&
-        isClipboardTextEquals(lastTextRead, clipboardText)))
-  ) {
-    return;
+  if (clipboardType === "text") {
+    if (!clipboardText || isClipboardTextEmpty(clipboardText)) {
+      return;
+    }
+
+    if (
+      lastTimeRead &&
+      currentTime - lastTimeRead < 5000 &&
+      lastTextRead &&
+      isClipboardTextEquals(lastTextRead, clipboardText)
+    ) {
+      return;
+    }
   }
 
-  if (
-    clipboardType === "image" &&
-    (!clipboardImage ||
-      (lastTimeRead &&
-        currentTime - lastTimeRead < 5000 &&
-        lastImageSha256Read === clipboardImageSha256))
-  ) {
-    return;
+  if (clipboardType === "image") {
+    if (!clipboardImage) {
+      return;
+    }
+
+    if (
+      lastTimeRead &&
+      currentTime - lastTimeRead < 5000 &&
+      lastImageSha256Read === clipboardImageSha256
+    ) {
+      return;
+    }
   }
 
-  if (
-    clipboardType === "files" &&
-    (!clipboardFilePaths ||
-      (lastTimeRead &&
-        currentTime - lastTimeRead < 5000 &&
-        isArrayEquals(lastClipboardFilePathsRead, clipboardFilePaths)) ||
-      getFilesSizeInMb(clipboardFilePaths) > 100)
-  ) {
-    return;
+  if (clipboardType === "files") {
+    if (!clipboardFilePaths) {
+      return;
+    }
+
+    if (
+      lastTimeRead &&
+      currentTime - lastTimeRead < 5000 &&
+      lastClipboardFilePathsRead &&
+      isArrayEquals(lastClipboardFilePathsRead, clipboardFilePaths)
+    ) {
+      return;
+    }
   }
 
   const writeTime = getNextWriteTime(syncFolder);
@@ -241,125 +266,61 @@ const writeClipboardToFile = () => {
   setIconFor5Seconds("clipboard_sent");
 };
 
-const readClipboardFromFile = (file: string) => {
+const receiveClipboardFromFile = (file: string) => {
   const currentTime = Date.now();
 
-  const parsedFile = parseClipboardFileName(file, "from-others");
-  if (!parsedFile) {
+  const clipboardFile = ClipboardFile.fromFileName(file);
+  if (!clipboardFile || clipboardFile.from === "myself") {
     if (!isIsReceivingFile(file)) {
       console.error(`Unrecognized file: ${file}`);
     }
     return;
   }
-  const currentFileTime = parsedFile.number;
-  const fileClipboardType = parsedFile.clipboardType;
+  const currentFileTime = clipboardFile.number;
 
-  let currentText: ClipboardText;
-  let currentImage: Buffer;
-  let currentClipboardType: ClipboardType;
-  let currentImageSha256: string;
-  let currentFilePaths: string[];
+  const currentClipboard = ClipboardFile.fromCurrentClipboard();
 
-  const clipboardFormats = clipboard.availableFormats();
-  try {
-    if (
-      clipboardFormats.includes("text/plain") ||
-      clipboardFormats.includes("text/html") ||
-      clipboardFormats.includes("text/rtf")
-    ) {
-      currentText = {};
-      if (clipboardFormats.includes("text/plain")) {
-        currentText.text = clipboard.readText() ?? undefined;
-      }
-      if (clipboardFormats.includes("text/html")) {
-        currentText.html = clipboard.readHTML() ?? undefined;
-      }
-      if (clipboardFormats.includes("text/rtf")) {
-        currentText.rtf = clipboard.readRTF() ?? undefined;
-      }
-      currentClipboardType = "text";
-    } else if (clipboardFormats.includes("image/png")) {
-      currentImage = clipboard.readImage().toPNG();
-      currentImageSha256 = calculateSha256(currentImage);
-      currentClipboardType = "image";
-    } else if (clipboardFormats.includes("text/uri-list")) {
-      currentFilePaths = clipboardEx.readFilePaths();
-      currentClipboardType = "files";
-    }
-  } catch (error) {
+  if (!currentClipboard) {
     console.error("Error reading current clipboard");
     return;
   }
 
-  let newText: ClipboardText;
-  let newImage: Buffer;
-  let newImageSha256: string;
-  let newFilePaths: string[];
-  let newFilesCount: number;
-  try {
-    if (fileClipboardType === "text") {
-      if (!config.get("receiveTexts", true)) {
-        return;
-      }
-      newText = JSON.parse(
-        fs.readFileSync(file, {
-          encoding: "utf8",
-        })
-      );
-    } else if (fileClipboardType === "image") {
-      if (!config.get("receiveImages", true)) {
-        return;
-      }
-      newImage = fs.readFileSync(file);
-      newImageSha256 = calculateSha256(newImage);
-    } else if (fileClipboardType === "files") {
-      if (!config.get("receiveFiles", true)) {
-        return;
-      }
-      newFilesCount = parsedFile.filesCount;
-      if (!newFilesCount) {
-        console.error(
-          `Could not read the number of files in ${file}. Skipping...`
-        );
-        return;
-      }
-      newFilePaths = fs
-        .readdirSync(file)
-        .map((fileName: string) => path.join(file, fileName));
-      const filesCountInFolder = getTotalNumberOfFiles(newFilePaths);
-      if (newFilesCount !== filesCountInFolder) {
-        console.error(
-          `Not all files are yet present in _files folder. Current: ${filesCountInFolder}, expected: ${newFilesCount}. Skipping...`
-        );
-        return;
-      }
-    }
-  } catch (error) {
-    console.error(`Error reading clipboard from file ${file}`);
+  if (
+    clipboardFile.content instanceof ClipboardText &&
+    !config.get("receiveTexts", true)
+  ) {
     return;
   }
 
-  if (currentClipboardType === fileClipboardType) {
-    if (
-      currentClipboardType === "text" &&
-      (isClipboardTextEmpty(newText) ||
-        isClipboardTextEquals(currentText, newText))
-    ) {
-      // Prevents writing duplicated text to clipboard
-      return;
-    } else if (
-      fileClipboardType === "image" &&
-      (!newImage || currentImageSha256 === newImageSha256)
-    ) {
-      // Prevents writing duplicated image to clipboard
-      return;
-    } else if (
-      fileClipboardType === "files" &&
-      (!newFilePaths || isArrayEquals(currentFilePaths, newFilePaths))
-    ) {
-      // Prevents writing duplicated files to clipboard
-      return;
+  if (
+    clipboardFile.content instanceof ClipboardImage &&
+    !config.get("receiveImages", true)
+  ) {
+    return;
+  }
+
+  if (
+    clipboardFile.content instanceof ClipboardFiles &&
+    !config.get("receiveFiles", true)
+  ) {
+    return;
+  }
+
+  try {
+    clipboardFile.content.loadFromFileOrFolder(file);
+  } catch (error) {
+    if (error instanceof Error) {
+      console.error(error.message);
     }
+    return;
+  }
+
+  if (clipboardFile.content.isEmpty()) {
+    return;
+  }
+
+  if (clipboardFile.content.equals(currentClipboard.content)) {
+    return;
   }
 
   // Skips the read if a newer file was already wrote
@@ -467,7 +428,7 @@ const initialize = async () => {
         // Execute readCLipboardFromFile only if there is a "create" event
         for (const event of events) {
           if (event.type === "create") {
-            readClipboardFromFile(event.path);
+            receiveClipboardFromFile(event.path);
           }
         }
       },

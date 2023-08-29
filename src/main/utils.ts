@@ -1,19 +1,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import * as fswin from "fswin";
 import { https } from "follow-redirects";
 import { RequestOptions } from "https";
 import { promisify } from "util";
 import { createHash } from "crypto";
-
-export const isArrayEquals = (arr1?: any[], arr2?: any[]) => {
-  if (arr1 && arr2 && arr1.length == arr2.length) {
-    arr1 = arr1.sort();
-    arr2 = arr2.sort();
-    return arr1.every((u: any, i: number) => u === arr2[i]);
-  }
-  return false;
-};
 
 export const iterateThroughFilesRecursively = (
   paths: string[],
@@ -42,6 +34,15 @@ export const iterateThroughFilesRecursively = (
     }
   }
   return results;
+};
+
+export const unsyncFileOrFolderRecursively = (fileOrFolder: string) => {
+  iterateThroughFilesRecursively([fileOrFolder], (file) => {
+    fswin.setAttributesSync(file, {
+      IS_UNPINNED: true,
+      IS_PINNED: false,
+    });
+  });
 };
 
 export const getTotalNumberOfFiles = (paths: string[]): number => {
