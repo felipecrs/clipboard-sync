@@ -1,4 +1,4 @@
-<img align="left" width="100" height="100" src="./assets/appicons/png/icon.png">
+<img align="left" width="100" height="100" src="./resources/appicons/png/icon.png">
 
 # Clipboard Sync
 

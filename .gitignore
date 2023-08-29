@@ -88,6 +88,8 @@ typings/
 # Electron-Forge
 out/
 
-lib/
+# Electron Vite
+dist/
 
-binaries/
+# bindl
+resources/binaries/

@@ -46,7 +46,7 @@ export const iterateThroughFilesRecursively = (
 
 export const getTotalNumberOfFiles = (paths: string[]): number => {
   let totalNumberOfFiles = 0;
-  iterateThroughFilesRecursively(paths, (file) => {
+  iterateThroughFilesRecursively(paths, () => {
     totalNumberOfFiles++;
   });
   return totalNumberOfFiles;

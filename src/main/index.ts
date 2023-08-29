@@ -9,8 +9,8 @@ import {
   Tray,
 } from "electron";
 import * as clipboardEx from "electron-clipboard-ex";
-import * as Store from "electron-store";
-import * as watcher from "@parcel/watcher";
+import Store from "electron-store";
+import watcher from "@parcel/watcher";
 import * as cron from "node-cron";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -165,6 +165,7 @@ const writeClipboardToFile = () => {
     }
   } catch (error) {
     console.error("Error reading current clipboard");
+    return;
   }
 
   if (!clipboardType) {
@@ -540,7 +541,7 @@ const getAppIcon = () => {
 
   return path.resolve(
     __dirname,
-    `../assets/appicons/${iconExtension}/icon.${iconExtension}`
+    `../../resources/appicons/${iconExtension}/icon.${iconExtension}`
   );
 };
 
@@ -549,7 +550,7 @@ const getTrayIcon = (icon: ClipboardIcon) => {
 
   return path.resolve(
     __dirname,
-    `../assets/trayicons/${iconExtension}/${icon}.${iconExtension}`
+    `../../resources/trayicons/${iconExtension}/${icon}.${iconExtension}`
   );
 };
 
@@ -770,7 +771,7 @@ const createAppIcon = () => {
   const watchmanBinDir = path.resolve(
     path.join(
       __dirname,
-      "../binaries/win32/x64/watchman-v2023.08.07.00-windows/bin"
+      `../../resources/binaries/${process.platform}/${process.arch}/watchman`
     )
   );
 
