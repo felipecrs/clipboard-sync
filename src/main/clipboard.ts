@@ -101,14 +101,7 @@ export const getNextWriteTime = (syncFolder: string) => {
     }
   }
   if (numbers.length > 0) {
-    // https://stackoverflow.com/a/1063027/12156188
-    return (
-      numbers
-        .sort((a, b) => {
-          return a - b;
-        })
-        .at(-1) + 1
-    );
+    return Math.max(...numbers) + 1;
   }
   return 1;
 };
@@ -122,7 +115,7 @@ export const isThereMoreThanOneClipboardFile = (syncFolder: string) => {
     if (parsedFile) {
       found++;
       if (found > 1) {
-        return;
+        return true;
       }
     }
   }

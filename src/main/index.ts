@@ -9,8 +9,8 @@ import {
   Tray,
 } from "electron";
 import * as clipboardEx from "electron-clipboard-ex";
-import * as Store from "electron-store";
-import * as watcher from "@parcel/watcher";
+import Store from "electron-store";
+import watcher from "@parcel/watcher";
 import * as cron from "node-cron";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -165,6 +165,7 @@ const writeClipboardToFile = () => {
     }
   } catch (error) {
     console.error("Error reading current clipboard");
+    return;
   }
 
   if (!clipboardType) {
