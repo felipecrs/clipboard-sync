@@ -17,7 +17,12 @@ const getAppIcon = () => {
 module.exports = {
   packagerConfig: {
     icon: getAppIcon(),
+    ignore: [
+      /^\/(src)|(.github)|(.vscode)/,
+      /\/(.eslintrc.json)|(.gitignore)|(.gitattributes)|(electron.vite.config.ts)|(forge.config.cjs)|(tsconfig.json)|(bindl.config.js)|(bindl.config.js)|(README.md)$/,
+    ],
   },
+  rebuildConfig: {},
   makers: [
     {
       name: "@electron-forge/maker-squirrel",
