@@ -45,7 +45,7 @@ if (require("electron-squirrel-startup")) {
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
-  process.exit();
+  app.exit();
 }
 
 type ConfigType = {
@@ -80,7 +80,6 @@ const config = new Store<ConfigType>({
 });
 
 let appIcon: Tray = null;
-let firstTime = true;
 
 let syncFolder: string = null;
 
@@ -407,7 +406,7 @@ const askForFolder = () => {
       "Folder was not selected",
       "Please start the application again to select a folder."
     );
-    finish(1);
+    quit(1);
     return;
   } else if (!folderSelected) {
     return;
@@ -500,9 +499,11 @@ const initialize = async () => {
 
 const cleanup = () => {
   // Deletes the file that indicates that this computer is receiving clipboards
-  fs.rmSync(path.join(syncFolder, hostNameIsReceivingFileName), {
-    force: true,
-  });
+  if (syncFolder) {
+    fs.rmSync(path.join(syncFolder, hostNameIsReceivingFileName), {
+      force: true,
+    });
+  }
 
   if (clipboardListener) {
     clipboardListener.stopListening();
@@ -524,11 +525,6 @@ const reload = () => {
   console.log("Reloading configuration...");
   cleanup();
   initialize();
-};
-
-const finish = (exitCode: number = 0) => {
-  cleanup();
-  app.exit(exitCode);
 };
 
 const getAppIcon = () => {
@@ -743,7 +739,7 @@ const setContextMenu = () => {
     {
       label: "Exit",
       type: "normal",
-      click: () => finish(),
+      click: () => quit(),
     },
   ]);
   appIcon.setContextMenu(menu);
@@ -779,10 +775,7 @@ const createAppIcon = () => {
 
   initialize();
 
-  if (firstTime) {
-    firstTime = false;
-    autoCheckForUpdates();
-  }
+  autoCheckForUpdates();
 };
 
 // This method will be called when Electron has finished
@@ -790,10 +783,22 @@ const createAppIcon = () => {
 // Some APIs can only be used after this event occurs.
 app.on("ready", createAppIcon);
 
-app.on("window-all-closed", () => {
-  finish();
-});
-
-app.on("before-quit", () => {
+let cleanupBeforeQuitDone = false;
+const cleanupBeforeQuit = () => {
+  if (cleanupBeforeQuitDone) {
+    return;
+  }
   cleanup();
-});
+  cleanupBeforeQuitDone = true;
+};
+
+const quit = (exitCode: number = 0) => {
+  if (exitCode === 0) {
+    app.quit();
+  } else {
+    cleanupBeforeQuit();
+    app.exit(exitCode);
+  }
+};
+
+app.on("before-quit", cleanupBeforeQuit);
