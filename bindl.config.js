@@ -1,4 +1,4 @@
-const version = "2023.08.07.00";
+const version = "2023.10.02.00";
 
 module.exports = {
   downloadDirectory: "./resources/binaries",

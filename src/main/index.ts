@@ -536,8 +536,8 @@ const getAppIcon = () => {
       : "png";
 
   return path.resolve(
-    __dirname,
-    `../../resources/appicons/${iconExtension}/icon.${iconExtension}`
+    app.getAppPath(),
+    `resources/appicons/${iconExtension}/icon.${iconExtension}`
   );
 };
 
@@ -545,8 +545,8 @@ const getTrayIcon = (icon: ClipboardIcon) => {
   const iconExtension = process.platform === "win32" ? "ico" : "png";
 
   return path.resolve(
-    __dirname,
-    `../../resources/trayicons/${iconExtension}/${icon}.${iconExtension}`
+    app.getAppPath(),
+    `resources/trayicons/${iconExtension}/${icon}.${iconExtension}`
   );
 };
 
@@ -766,8 +766,8 @@ const createAppIcon = () => {
   // Set PATH to include bundled watchman binaries
   const watchmanBinDir = path.resolve(
     path.join(
-      __dirname,
-      `../../resources/binaries/${process.platform}/${process.arch}/watchman`
+      app.getAppPath(),
+      `resources/binaries/${process.platform}/${process.arch}/watchman`
     )
   );
 
