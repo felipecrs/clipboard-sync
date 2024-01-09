@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import {
   app,
   clipboard,
@@ -8,13 +10,12 @@ import {
   shell,
   Tray,
 } from "electron";
-import * as clipboardEx from "electron-clipboard-ex";
+import clipboardEx from "electron-clipboard-ex";
 import Store from "electron-store";
 import watcher from "@parcel/watcher";
-import * as cron from "node-cron";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import * as semver from "semver";
+import cron from "node-cron";
+import semver from "semver";
+import type { ClipboardEventListener } from "clipboard-event";
 
 import {
   cleanFiles,
@@ -26,8 +27,8 @@ import {
   ClipboardText,
   isClipboardTextEquals,
   isClipboardTextEmpty,
-} from "./clipboard";
-import { hostName, hostNameIsReceivingFileName } from "./global";
+} from "./clipboard.js";
+import { hostName, hostNameIsReceivingFileName } from "./global.js";
 import {
   calculateSha256,
   copyFolderRecursive,
@@ -35,10 +36,10 @@ import {
   getRedirectedUrl,
   getTotalNumberOfFiles,
   isArrayEquals,
-} from "./utils";
+} from "./utils.js";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
-if (require("electron-squirrel-startup")) {
+if ((await import("electron-squirrel-startup")).default) {
   app.exit();
 }
 
@@ -57,12 +58,6 @@ type ConfigType = {
   receiveImages: boolean;
   receiveFiles: boolean;
   autoCleanup: boolean;
-};
-
-type ClipboardListener = {
-  startListening: () => void;
-  on: (arg0: string, arg1: () => void) => void;
-  stopListening: () => void;
 };
 
 type ClipboardIcon = "clipboard" | "clipboard_sent" | "clipboard_received";
@@ -90,7 +85,7 @@ let lastImageSha256Read: string = null;
 let lastClipboardFilePathsRead: string[] = null;
 let lastTimeRead: number = null;
 
-let clipboardListener: ClipboardListener = null;
+let clipboardListener: ClipboardEventListener = null;
 let clipboardFilesWatcher: watcher.AsyncSubscription = null;
 let filesCleanerTask: cron.ScheduledTask = null;
 let iconWaiter: NodeJS.Timeout = null;
@@ -442,7 +437,7 @@ const initialize = async () => {
     config.get("sendImages", true) ||
     config.get("sendFiles", true)
   ) {
-    clipboardListener = require("clipboard-event");
+    clipboardListener = (await import("clipboard-event")).default;
     clipboardListener.startListening();
     clipboardListener.on(
       "change",

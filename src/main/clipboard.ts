@@ -1,12 +1,12 @@
-import * as fs from "node:fs";
-import * as path from "node:path";
-import * as fswin from "fswin";
+import fs from "node:fs";
+import path from "node:path";
+import fswin from "fswin";
 
-import { hostName, isReceivingFileNameSuffix } from "./global";
+import { hostName, isReceivingFileNameSuffix } from "./global.js";
 import {
   deleteFileOrFolderRecursively,
   iterateThroughFilesRecursively,
-} from "./utils";
+} from "./utils.js";
 
 export type ClipboardType = "text" | "image" | "files";
 
