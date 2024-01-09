@@ -1,10 +1,9 @@
-import * as fs from "node:fs";
-import * as path from "node:path";
-
-import { https } from "follow-redirects";
-import { RequestOptions } from "https";
-import { promisify } from "util";
-import { createHash } from "crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { RequestOptions } from "node:https";
+import { promisify } from "node:util";
+import { createHash } from "node:crypto";
+import followRedirects from "follow-redirects";
 
 export const isArrayEquals = (arr1?: any[], arr2?: any[]) => {
   if (arr1 && arr2 && arr1.length == arr2.length) {
@@ -107,9 +106,12 @@ export const calculateSha256 = (data: Buffer) => {
 export const getRedirectedUrl = async (requestOptions: RequestOptions) => {
   return await promisify(
     (requestOptions: RequestOptions, callback: Function) => {
-      const request = https.request(requestOptions, (response) => {
-        callback(null, response.responseUrl);
-      });
+      const request = followRedirects.https.request(
+        requestOptions,
+        (response) => {
+          callback(null, response.responseUrl);
+        }
+      );
       request.end();
     }
   )(requestOptions);

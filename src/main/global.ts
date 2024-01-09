@@ -1,4 +1,4 @@
-import * as os from "node:os";
+import os from "node:os";
 
 export const hostName = os.hostname();
 export const isReceivingFileNameSuffix = ".is-receiving.txt";
