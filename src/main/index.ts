@@ -1,4 +1,4 @@
-import fs from "node:fs";
+import fs from "node:fs/promises";
 import path from "node:path";
 import {
   app,
@@ -92,15 +92,12 @@ let iconWaiter: NodeJS.Timeout = null;
 
 let lastTimeChecked: number = null;
 
-const writeClipboardToFile = () => {
+const writeClipboardToFile = async () => {
   // Avoids sending the clipboard if there is no other computer receiving
   if (
-    fs
-      .readdirSync(syncFolder)
-      .filter(
-        (file) =>
-          isIsReceivingFile(file) && file !== hostNameIsReceivingFileName
-      ).length === 0
+    (await fs.readdir(syncFolder)).filter(
+      (file) => isIsReceivingFile(file) && file !== hostNameIsReceivingFileName
+    ).length === 0
   ) {
     console.error(
       "No other computer is receiving clipboards. Skipping clipboard send..."
@@ -193,40 +190,44 @@ const writeClipboardToFile = () => {
       (lastTimeRead &&
         currentTime - lastTimeRead < 5000 &&
         isArrayEquals(lastClipboardFilePathsRead, clipboardFilePaths)) ||
-      getFilesSizeInMb(clipboardFilePaths) > 100)
+      (await getFilesSizeInMb(clipboardFilePaths)) > 100)
   ) {
     return;
   }
 
-  const writeTime = getNextWriteTime(syncFolder);
+  const writeTime = await getNextWriteTime(syncFolder);
   let destinationPath: string;
   if (clipboardType === "text") {
     destinationPath = path.join(
       syncFolder,
       `${writeTime}-${hostName}.text.json`
     );
-    fs.writeFileSync(destinationPath, JSON.stringify(clipboardText, null, 2), {
-      encoding: "utf8",
-    });
+    await fs.writeFile(
+      destinationPath,
+      JSON.stringify(clipboardText, null, 2),
+      {
+        encoding: "utf8",
+      }
+    );
   } else if (clipboardType === "image") {
     destinationPath = path.join(syncFolder, `${writeTime}-${hostName}.png`);
-    fs.writeFileSync(destinationPath, clipboardImage);
+    await fs.writeFile(destinationPath, clipboardImage);
   } else if (clipboardType === "files") {
-    clipboardFilesCount = getTotalNumberOfFiles(clipboardFilePaths);
+    clipboardFilesCount = await getTotalNumberOfFiles(clipboardFilePaths);
     destinationPath = path.join(
       syncFolder,
       `${writeTime}-${hostName}.${clipboardFilesCount}_files`
     );
-    fs.mkdirSync(destinationPath);
+    await fs.mkdir(destinationPath);
     for (const filePath of clipboardFilePaths) {
       const fullDestination = path.join(
         destinationPath,
         path.basename(filePath)
       );
-      if (fs.statSync(filePath).isDirectory()) {
+      if ((await fs.stat(filePath)).isDirectory()) {
         copyFolderRecursive(filePath, fullDestination);
       } else {
-        fs.copyFileSync(filePath, fullDestination);
+        await fs.copyFile(filePath, fullDestination);
       }
     }
   }
@@ -236,10 +237,10 @@ const writeClipboardToFile = () => {
   setIconFor5Seconds("clipboard_sent");
 };
 
-const readClipboardFromFile = (file: string) => {
+const readClipboardFromFile = async (file: string) => {
   const currentTime = Date.now();
 
-  const parsedFile = parseClipboardFileName(file, "from-others");
+  const parsedFile = await parseClipboardFileName(file, "from-others");
   if (!parsedFile) {
     if (!isIsReceivingFile(file)) {
       console.error(`Unrecognized file: ${file}`);
@@ -297,7 +298,7 @@ const readClipboardFromFile = (file: string) => {
         return;
       }
       newText = JSON.parse(
-        fs.readFileSync(file, {
+        await fs.readFile(file, {
           encoding: "utf8",
         })
       );
@@ -305,7 +306,7 @@ const readClipboardFromFile = (file: string) => {
       if (!config.get("receiveImages", true)) {
         return;
       }
-      newImage = fs.readFileSync(file);
+      newImage = await fs.readFile(file);
       newImageSha256 = calculateSha256(newImage);
     } else if (fileClipboardType === "files") {
       if (!config.get("receiveFiles", true)) {
@@ -318,10 +319,10 @@ const readClipboardFromFile = (file: string) => {
         );
         return;
       }
-      newFilePaths = fs
-        .readdirSync(file)
-        .map((fileName: string) => path.join(file, fileName));
-      const filesCountInFolder = getTotalNumberOfFiles(newFilePaths);
+      newFilePaths = (await fs.readdir(file)).map((fileName: string) =>
+        path.join(file, fileName)
+      );
+      const filesCountInFolder = await getTotalNumberOfFiles(newFilePaths);
       if (newFilesCount !== filesCountInFolder) {
         console.error(
           `Not all files are yet present in _files folder. Current: ${filesCountInFolder}, expected: ${newFilesCount}. Skipping...`
@@ -421,15 +422,27 @@ const initialize = async () => {
     return;
   }
 
-  if (
-    !syncFolder ||
-    (fs.existsSync(syncFolder) && !fs.lstatSync(syncFolder).isDirectory())
-  ) {
-    askForFolder();
+  try {
+    const stats = await fs.lstat(syncFolder);
+    if (!syncFolder || !stats.isDirectory()) {
+      askForFolder();
+    }
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      askForFolder();
+    } else {
+      throw error;
+    }
   }
 
-  if (!fs.existsSync(syncFolder)) {
-    fs.mkdirSync(syncFolder);
+  try {
+    await fs.access(syncFolder);
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      await fs.mkdir(syncFolder);
+    } else {
+      throw error;
+    }
   }
 
   if (
@@ -454,7 +467,7 @@ const initialize = async () => {
     // Watches for files and reads clipboard from it
     clipboardFilesWatcher = await watcher.subscribe(
       syncFolder,
-      (err, events) => {
+      async (err, events) => {
         if (err) {
           console.error(err);
           return;
@@ -462,7 +475,7 @@ const initialize = async () => {
         // Execute readCLipboardFromFile only if there is a "create" event
         for (const event of events) {
           if (event.type === "create") {
-            readClipboardFromFile(event.path);
+            await readClipboardFromFile(event.path);
           }
         }
       },
@@ -475,7 +488,7 @@ const initialize = async () => {
     );
 
     // Create a file to indicate that this computer is receiving clipboards
-    fs.writeFileSync(path.join(syncFolder, hostNameIsReceivingFileName), "");
+    await fs.writeFile(path.join(syncFolder, hostNameIsReceivingFileName), "");
   }
 
   if (config.get("autoCleanup", true)) {
@@ -492,10 +505,10 @@ const initialize = async () => {
   }
 };
 
-const cleanup = () => {
+const cleanup = async () => {
   // Deletes the file that indicates that this computer is receiving clipboards
   if (syncFolder) {
-    fs.rmSync(path.join(syncFolder, hostNameIsReceivingFileName), {
+    await fs.rm(path.join(syncFolder, hostNameIsReceivingFileName), {
       force: true,
     });
   }
@@ -516,10 +529,10 @@ const cleanup = () => {
   }
 };
 
-const reload = () => {
+const reload = async () => {
   console.log("Reloading configuration...");
-  cleanup();
-  initialize();
+  await cleanup();
+  await initialize();
 };
 
 const getAppIcon = () => {
@@ -740,7 +753,7 @@ const setContextMenu = () => {
   appIcon.setContextMenu(menu);
 };
 
-const createAppIcon = () => {
+const createAppIcon = async () => {
   appIcon = new Tray(
     getTrayIcon("clipboard"),
     // This GUID should not be changed. It ensures the tray icon position is kept between app updates.
@@ -768,9 +781,9 @@ const createAppIcon = () => {
 
   process.env.PATH = `${process.env.PATH};${watchmanBinDir}`;
 
-  initialize();
+  await initialize();
 
-  autoCheckForUpdates();
+  await autoCheckForUpdates();
 };
 
 // This method will be called when Electron has finished
@@ -779,11 +792,11 @@ const createAppIcon = () => {
 app.on("ready", createAppIcon);
 
 let cleanupBeforeQuitDone = false;
-const cleanupBeforeQuit = () => {
+const cleanupBeforeQuit = async () => {
   if (cleanupBeforeQuitDone) {
     return;
   }
-  cleanup();
+  await cleanup();
   cleanupBeforeQuitDone = true;
 };
 

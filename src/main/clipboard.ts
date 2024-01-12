@@ -1,4 +1,4 @@
-import fs from "node:fs";
+import fs from "node:fs/promises";
 import path from "node:path";
 import fswin from "fswin";
 
@@ -11,15 +11,15 @@ import {
 export type ClipboardType = "text" | "image" | "files";
 
 // returns null if not valid
-export const parseClipboardFileName = (
+export const parseClipboardFileName = async (
   file: string,
   filter: "none" | "from-others" | "from-myself" = "none"
-): {
+): Promise<{
   number: number;
   clipboardType: ClipboardType;
   from: "myself" | "others";
   filesCount?: number;
-} => {
+}> => {
   let number = 0;
   let clipboardType: ClipboardType;
   let from: "myself" | "others";
@@ -29,8 +29,9 @@ export const parseClipboardFileName = (
   let parsedFile;
   try {
     parsedFile = path.parse(file);
-    fileStat = fs.lstatSync(file);
-  } catch {
+    fileStat = await fs.lstat(file);
+  } catch (err) {
+    console.error(`Failed to parse file name: ${err}`);
     return null;
   }
 
@@ -90,12 +91,12 @@ export const parseClipboardFileName = (
   return { number, clipboardType, from, filesCount };
 };
 
-export const getNextWriteTime = (syncFolder: string) => {
+export const getNextWriteTime = async (syncFolder: string) => {
   const numbers: number[] = [];
-  const files = fs.readdirSync(syncFolder);
+  const files = await fs.readdir(syncFolder);
   for (const file of files) {
     const filePath = path.join(syncFolder, file);
-    const parsedFile = parseClipboardFileName(filePath);
+    const parsedFile = await parseClipboardFileName(filePath);
     if (parsedFile) {
       numbers.push(parsedFile.number);
     }
@@ -106,12 +107,12 @@ export const getNextWriteTime = (syncFolder: string) => {
   return 1;
 };
 
-export const isThereMoreThanOneClipboardFile = (syncFolder: string) => {
+export const isThereMoreThanOneClipboardFile = async (syncFolder: string) => {
   let found = 0;
-  const files = fs.readdirSync(syncFolder);
+  const files = await fs.readdir(syncFolder);
   for (const file of files) {
     const filePath = path.join(syncFolder, file);
-    const parsedFile = parseClipboardFileName(filePath);
+    const parsedFile = await parseClipboardFileName(filePath);
     if (parsedFile) {
       found++;
       if (found > 1) {
@@ -129,16 +130,16 @@ export const isIsReceivingFile = (file: string) => {
 // Unsyncs from-others files older than 1 minute,
 // Removes from-myself files older than 5 minutes,
 // And removes from-others files older than 10 minutes.
-export const cleanFiles = (syncFolder: string) => {
+export const cleanFiles = async (syncFolder: string) => {
   const now = Date.now();
   const currentTimeMinus1Min = now - 60000;
   const currentTimeMinus5Min = now - 300000;
 
-  const files = fs.readdirSync(syncFolder);
+  const files = await fs.readdir(syncFolder);
   for (const file of files) {
     const filePath = path.join(syncFolder, file);
 
-    const parsedFile = parseClipboardFileName(filePath);
+    const parsedFile = await parseClipboardFileName(filePath);
 
     if (!parsedFile) {
       // These files will be deleted at application finish.
@@ -154,15 +155,15 @@ export const cleanFiles = (syncFolder: string) => {
         );
       if (match) {
         console.log(`Deleting file used by previous versions: ${filePath}`);
-        deleteFileOrFolderRecursively(filePath);
+        await deleteFileOrFolderRecursively(filePath);
       }
       continue;
     }
 
-    const fileStat = fs.statSync(filePath);
+    const fileStat = await fs.lstat(filePath);
     if (fileStat.ctime.getTime() <= currentTimeMinus5Min) {
       console.log(`Deleting: ${filePath}`);
-      deleteFileOrFolderRecursively(filePath);
+      await deleteFileOrFolderRecursively(filePath);
       continue;
     }
 
