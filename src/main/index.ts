@@ -20,13 +20,14 @@ import type { ClipboardEventListener } from "clipboard-event";
 import {
   cleanFiles,
   parseClipboardFileName,
-  getNextWriteTime,
+  getNextFileNumber as getNextFileNumber,
   isThereMoreThanOneClipboardFile,
   isIsReceivingFile,
   ClipboardType,
   ClipboardText,
   isClipboardTextEquals,
   isClipboardTextEmpty,
+  ParsedClipboardFileName,
 } from "./clipboard.js";
 import { hostName, hostNameIsReceivingFileName } from "./global.js";
 import {
@@ -82,7 +83,7 @@ let appIcon: Tray = null;
 
 let syncFolder: string = null;
 
-let lastTimeWritten: number = null;
+let lastFileNumberWritten: number = null;
 
 let lastTextRead: ClipboardText = null;
 let lastImageSha256Read: string = null;
@@ -121,7 +122,7 @@ const writeClipboardToFile = async () => {
   let clipboardImage: Buffer;
   let clipboardImageSha256: string;
   let clipboardFilePaths: string[];
-  let clipboardFilesCount: number;
+  let filesCount: number;
   const clipboardFormats = clipboard.availableFormats();
 
   try {
@@ -199,12 +200,12 @@ const writeClipboardToFile = async () => {
     return;
   }
 
-  const writeTime = await getNextWriteTime(syncFolder);
+  const fileNumber = await getNextFileNumber(syncFolder);
   let destinationPath: string;
   if (clipboardType === "text") {
     destinationPath = path.join(
       syncFolder,
-      `${writeTime}-${hostName}.text.json`
+      `${fileNumber}-${hostName}.text.json`
     );
     await fs.writeFile(
       destinationPath,
@@ -214,13 +215,13 @@ const writeClipboardToFile = async () => {
       }
     );
   } else if (clipboardType === "image") {
-    destinationPath = path.join(syncFolder, `${writeTime}-${hostName}.png`);
+    destinationPath = path.join(syncFolder, `${fileNumber}-${hostName}.png`);
     await fs.writeFile(destinationPath, clipboardImage);
   } else if (clipboardType === "files") {
-    clipboardFilesCount = await getTotalNumberOfFiles(clipboardFilePaths);
+    filesCount = await getTotalNumberOfFiles(clipboardFilePaths);
     destinationPath = path.join(
       syncFolder,
-      `${writeTime}-${hostName}.${clipboardFilesCount}_files`
+      `${fileNumber}-${hostName}.${filesCount}_files`
     );
     await fs.mkdir(destinationPath);
     for (const filePath of clipboardFilePaths) {
@@ -229,30 +230,72 @@ const writeClipboardToFile = async () => {
         path.basename(filePath)
       );
       if ((await fs.stat(filePath)).isDirectory()) {
-        copyFolderRecursive(filePath, fullDestination);
+        await copyFolderRecursive(filePath, fullDestination);
       } else {
         await fs.copyFile(filePath, fullDestination);
       }
     }
   }
   console.log(`Clipboard written to ${destinationPath}`);
-  lastTimeWritten = writeTime;
+  lastFileNumberWritten = fileNumber;
 
   setIconFor5Seconds("clipboard_sent");
 };
 
-const readClipboardFromFile = async (file: string) => {
+const readClipboardFromFile = async (parsedFile: ParsedClipboardFileName) => {
   const currentTime = Date.now();
 
-  const parsedFile = await parseClipboardFileName(file, "from-others");
-  if (!parsedFile) {
-    if (!isIsReceivingFile(file)) {
-      console.error(`Unrecognized file: ${file}`);
+  const file = parsedFile.file;
+  const currentFileNumber = parsedFile.number;
+  const fileClipboardType = parsedFile.clipboardType;
+
+  let newText: ClipboardText;
+  let newImage: Buffer;
+  let newImageSha256: string;
+  let newFilePaths: string[];
+  let newFilesCount: number;
+  try {
+    if (fileClipboardType === "text") {
+      if (!config.get("receiveTexts", true)) {
+        return;
+      }
+      newText = JSON.parse(
+        await fs.readFile(file, {
+          encoding: "utf8",
+        })
+      );
+    } else if (fileClipboardType === "image") {
+      if (!config.get("receiveImages", true)) {
+        return;
+      }
+      newImage = await fs.readFile(file);
+      newImageSha256 = calculateSha256(newImage);
+    } else if (fileClipboardType === "files") {
+      if (!config.get("receiveFiles", true)) {
+        return;
+      }
+      newFilesCount = parsedFile.filesCount;
+      if (!newFilesCount) {
+        console.error(
+          `Could not read the number of files in ${file}. Skipping...`
+        );
+        return;
+      }
+      const filesCountInFolder = await getTotalNumberOfFiles([file]);
+      if (newFilesCount !== filesCountInFolder) {
+        console.error(
+          `Not all files are yet present in _files folder. Current: ${filesCountInFolder}, expected: ${newFilesCount}. Skipping...`
+        );
+        return;
+      }
+      newFilePaths = (await fs.readdir(file)).map((fileName: string) =>
+        path.join(file, fileName)
+      );
     }
+  } catch (error) {
+    console.error(`Error reading clipboard from file ${file}: ${error}`);
     return;
   }
-  const currentFileTime = parsedFile.number;
-  const fileClipboardType = parsedFile.clipboardType;
 
   let currentText: ClipboardText;
   let currentImage: Buffer;
@@ -287,86 +330,37 @@ const readClipboardFromFile = async (file: string) => {
       currentClipboardType = "files";
     }
   } catch (error) {
-    console.error("Error reading current clipboard");
+    console.error(`Error reading current clipboard: ${error}`);
     return;
   }
 
-  let newText: ClipboardText;
-  let newImage: Buffer;
-  let newImageSha256: string;
-  let newFilePaths: string[];
-  let newFilesCount: number;
-  try {
-    if (fileClipboardType === "text") {
-      if (!config.get("receiveTexts", true)) {
-        return;
-      }
-      newText = JSON.parse(
-        await fs.readFile(file, {
-          encoding: "utf8",
-        })
-      );
-    } else if (fileClipboardType === "image") {
-      if (!config.get("receiveImages", true)) {
-        return;
-      }
-      newImage = await fs.readFile(file);
-      newImageSha256 = calculateSha256(newImage);
-    } else if (fileClipboardType === "files") {
-      if (!config.get("receiveFiles", true)) {
-        return;
-      }
-      newFilesCount = parsedFile.filesCount;
-      if (!newFilesCount) {
-        console.error(
-          `Could not read the number of files in ${file}. Skipping...`
-        );
-        return;
-      }
-      newFilePaths = (await fs.readdir(file)).map((fileName: string) =>
-        path.join(file, fileName)
-      );
-      const filesCountInFolder = await getTotalNumberOfFiles(newFilePaths);
-      if (newFilesCount !== filesCountInFolder) {
-        console.error(
-          `Not all files are yet present in _files folder. Current: ${filesCountInFolder}, expected: ${newFilesCount}. Skipping...`
-        );
-        return;
-      }
-    }
-  } catch (error) {
-    console.error(`Error reading clipboard from file ${file}`);
-    return;
-  }
-
+  // Prevents writing duplicated stuff to clipboard
   if (currentClipboardType === fileClipboardType) {
     if (
       currentClipboardType === "text" &&
       (isClipboardTextEmpty(newText) ||
         isClipboardTextEquals(currentText, newText))
     ) {
-      // Prevents writing duplicated text to clipboard
       return;
     } else if (
       fileClipboardType === "image" &&
       (!newImage || currentImageSha256 === newImageSha256)
     ) {
-      // Prevents writing duplicated image to clipboard
       return;
     } else if (
       fileClipboardType === "files" &&
       (!newFilePaths || isArrayEquals(currentFilePaths, newFilePaths))
     ) {
-      // Prevents writing duplicated files to clipboard
       return;
     }
   }
 
-  // Skips the read if a newer file was already wrote
+  // Skips the read if a newer clipboard was already sent, which can happen if
+  // OneDrive takes too long to sync
   if (
     isThereMoreThanOneClipboardFile(syncFolder) &&
-    lastTimeWritten &&
-    currentFileTime < lastTimeWritten
+    lastFileNumberWritten &&
+    currentFileNumber < lastFileNumberWritten
   ) {
     return;
   }
@@ -471,22 +465,42 @@ const initialize = async () => {
     // Watches for files and reads clipboard from it
     clipboardFilesWatcher = await watcher.subscribe(
       syncFolder,
-      async (err, events) => {
-        if (err) {
-          console.error(err);
+      async (error, events) => {
+        if (error) {
+          console.error(`Error watching clipboard files: ${error}`);
+        }
+
+        if (!events) {
           return;
         }
-        // Execute readCLipboardFromFile only if there is a "create" event
+
+        const parsedFiles: ParsedClipboardFileName[] = [];
+
+        // Execute readCLipboardFromFile only if there is a "create" event and the file is valid
         for (const event of events) {
           if (event.type === "create") {
-            await readClipboardFromFile(event.path);
+            const parsedFile = parseClipboardFileName(
+              event.path,
+              syncFolder,
+              "from-others"
+            );
+            if (parsedFile) {
+              parsedFiles.push(parsedFile);
+            }
           }
+        }
+
+        if (parsedFiles.length > 0) {
+          // Sort events descending by number
+          parsedFiles.sort((a, b) => b.number - a.number);
+          // Read the clipboard from the most recent file
+          await readClipboardFromFile(parsedFiles[0]);
         }
       },
       {
         backend: "watchman",
         // This filters out temporary files created by the OneDrive client, example:
-        // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt~RF1a1c3c.TMP"
+        // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt.json~RF1a1c3c.TMP"
         ignore: ["**/*~*.TMP"],
       }
     );
