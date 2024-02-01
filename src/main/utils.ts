@@ -104,15 +104,19 @@ export const calculateSha256 = (data: Buffer) => {
 };
 
 export const getRedirectedUrl = async (requestOptions: RequestOptions) => {
-  return await promisify(
+  const result = await promisify(
     (requestOptions: RequestOptions, callback: Function) => {
-      const request = followRedirects.https.request(
+      const requestObj = followRedirects.https.request(
         requestOptions,
         (response) => {
           callback(null, response.responseUrl);
         }
       );
-      request.end();
+      requestObj.end();
     }
   )(requestOptions);
+  if (typeof result === "string") {
+    return result;
+  }
+  throw new Error("Failed to get redirected URL");
 };

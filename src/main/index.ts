@@ -14,7 +14,7 @@ import clipboardEx from "electron-clipboard-ex";
 import Store from "electron-store";
 import watcher from "@parcel/watcher";
 import cron from "node-cron";
-import semver from "semver";
+import { gt as semverGreaterThan } from "semver";
 import type { ClipboardEventListener } from "clipboard-event";
 
 import {
@@ -48,6 +48,10 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   app.exit();
 }
+
+process.on("uncaughtException", function (error) {
+  console.error(`Uncaught exception: ${error}`);
+});
 
 type ConfigType = {
   folder?: string;
@@ -569,23 +573,21 @@ const handleCleanupCheckBox = (checkBox: Electron.MenuItem) => {
 let updateLabel = "Check for updates";
 
 const isUpdateAvailable = async () => {
-  let available = false;
-
-  const newVersionUrl = await getRedirectedUrl({
-    hostname: "github.com",
-    path: "/felipecrs/clipboard-sync/releases/latest",
-  });
-  if (typeof newVersionUrl !== "string") {
-    console.error(`Could not get latest version from GitHub.`);
+  let newVersionUrl;
+  try {
+    newVersionUrl = await getRedirectedUrl({
+      hostname: "github.com",
+      path: "/felipecrs/clipboard-sync/releases/latest",
+    });
+  } catch (error) {
+    console.error(`Could not get latest version from GitHub: ${error}`);
     return false;
   }
+
   const newVersion = newVersionUrl.split("/").pop().replace(/^v/, "");
   const currentVersion = app.getVersion();
-  if (semver.gt(newVersion, currentVersion)) {
-    available = true;
-  }
 
-  if (available) {
+  if (semverGreaterThan(newVersion, currentVersion)) {
     updateLabel = "Download update";
     setContextMenu();
     return {
@@ -593,6 +595,7 @@ const isUpdateAvailable = async () => {
       newVersionUrl,
     };
   }
+
   return false;
 };
 
