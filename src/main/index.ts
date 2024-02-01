@@ -747,7 +747,7 @@ const createAppIcon = () => {
   appIcon = new Tray(
     getTrayIcon("clipboard"),
     // This GUID should not be changed. It ensures the tray icon position is kept between app updates.
-    "72812af2-6bcc-40d9-b35d-0b43e72ac346"
+    "72812af2-6bcc-40d9-b35d-0b43e72ac347"
   );
   setContextMenu();
   appIcon.setToolTip(`${app.name} v${app.getVersion()}`);
