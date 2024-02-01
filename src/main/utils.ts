@@ -1,4 +1,4 @@
-import fs from "node:fs";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { RequestOptions } from "node:https";
 import { promisify } from "node:util";
@@ -14,19 +14,22 @@ export const isArrayEquals = (arr1?: any[], arr2?: any[]) => {
   return false;
 };
 
-export const iterateThroughFilesRecursively = (
+export const iterateThroughFilesRecursively = async (
   paths: string[],
   fn: (arg0: string) => unknown
-): unknown[] => {
+): Promise<unknown[]> => {
   const results: unknown[] = [];
   for (const fileOrFolder of paths) {
-    if (fs.existsSync(fileOrFolder)) {
-      if (fs.statSync(fileOrFolder).isDirectory()) {
-        const files = fs.readdirSync(fileOrFolder);
+    try {
+      if ((await fs.lstat(fileOrFolder)).isDirectory()) {
+        const files = await fs.readdir(fileOrFolder);
         for (const file of files) {
           const filePath = path.join(fileOrFolder, file);
-          const results = iterateThroughFilesRecursively([filePath], fn);
-          for (const result of results) {
+          const subResults = await iterateThroughFilesRecursively(
+            [filePath],
+            fn
+          );
+          for (const result of subResults) {
             if (result) {
               results.push(result);
             }
@@ -38,23 +41,27 @@ export const iterateThroughFilesRecursively = (
           results.push(result);
         }
       }
+    } catch (err) {
+      console.error(err);
     }
   }
   return results;
 };
 
-export const getTotalNumberOfFiles = (paths: string[]): number => {
+export const getTotalNumberOfFiles = async (
+  paths: string[]
+): Promise<number> => {
   let totalNumberOfFiles = 0;
-  iterateThroughFilesRecursively(paths, () => {
+  await iterateThroughFilesRecursively(paths, () => {
     totalNumberOfFiles++;
   });
   return totalNumberOfFiles;
 };
 
-export const getFilesSizeInMb = (paths: string[]) => {
+export const getFilesSizeInMb = async (paths: string[]): Promise<number> => {
   let totalSize = 0;
-  const results = iterateThroughFilesRecursively(paths, (file) => {
-    return fs.lstatSync(file).size / (1024 * 1024);
+  const results = await iterateThroughFilesRecursively(paths, async (file) => {
+    return (await fs.lstat(file)).size / (1024 * 1024);
   });
   for (const size of results) {
     if (typeof size === "number") {
@@ -66,35 +73,40 @@ export const getFilesSizeInMb = (paths: string[]) => {
 };
 
 // https://stackoverflow.com/a/32197381/12156188
-export const deleteFileOrFolderRecursively = (fileOrFolder: string) => {
-  if (fs.existsSync(fileOrFolder)) {
-    if (fs.lstatSync(fileOrFolder).isDirectory()) {
-      const files = fs.readdirSync(fileOrFolder);
+export const deleteFileOrFolderRecursively = async (fileOrFolder: string) => {
+  try {
+    if ((await fs.lstat(fileOrFolder)).isDirectory()) {
+      const files = await fs.readdir(fileOrFolder);
       for (const file of files) {
         const filePath = path.join(fileOrFolder, file);
         // recurse
-        deleteFileOrFolderRecursively(filePath);
+        await deleteFileOrFolderRecursively(filePath);
       }
-      fs.rmdirSync(fileOrFolder);
+      await fs.rmdir(fileOrFolder);
     } else {
       // delete file
-      fs.unlinkSync(fileOrFolder);
+      await fs.unlink(fileOrFolder);
     }
+  } catch (err) {
+    console.error(err);
   }
 };
 
-export const copyFolderRecursive = (source: string, destination: string) => {
-  fs.mkdirSync(destination);
-  const files = fs.readdirSync(source);
+export const copyFolderRecursive = async (
+  source: string,
+  destination: string
+) => {
+  await fs.mkdir(destination, { recursive: true });
+  const files = await fs.readdir(source);
   for (const file of files) {
     const curPath = path.join(source, file);
     const fullDestination = path.join(destination, path.basename(curPath));
-    if (fs.lstatSync(curPath).isDirectory()) {
+    if ((await fs.lstat(curPath)).isDirectory()) {
       // recurse
-      copyFolderRecursive(curPath, fullDestination);
+      await copyFolderRecursive(curPath, fullDestination);
     } else {
       // copy file
-      fs.copyFileSync(curPath, fullDestination);
+      await fs.copyFile(curPath, fullDestination);
     }
   }
 };

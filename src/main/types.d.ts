@@ -1,5 +1,5 @@
 declare module "clipboard-event" {
-  import { EventEmitter } from "events";
+  import { EventEmitter } from "node:events";
 
   export class ClipboardEventListener extends EventEmitter {
     constructor();
