@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { watch, StatWatcher } from "node:fs";
 import path from "node:path";
 import {
   app,
@@ -12,7 +13,6 @@ import {
 } from "electron";
 import clipboardEx from "electron-clipboard-ex";
 import Store from "electron-store";
-import watcher from "@parcel/watcher";
 import cron from "node-cron";
 import { gt as semverGreaterThan } from "semver";
 import type { ClipboardEventListener } from "clipboard-event";
@@ -91,11 +91,12 @@ let lastClipboardFilePathsRead: string[] = null;
 let lastTimeRead: number = null;
 
 let clipboardListener: ClipboardEventListener = null;
-let clipboardFilesWatcher: watcher.AsyncSubscription = null;
+let clipboardFilesWatcher: StatWatcher = null;
 let filesCleanerTask: cron.ScheduledTask = null;
 let iconWaiter: NodeJS.Timeout = null;
 
-let lastTimeChecked: number = null;
+let lastTimeClipboardChecked: number = null;
+let lastTimeFilesChecked: number = null;
 
 const writeClipboardToFile = async () => {
   // Avoids sending the clipboard if there is no other computer receiving
@@ -112,10 +113,13 @@ const writeClipboardToFile = async () => {
 
   // Prevents duplicated clipboard events
   const currentTime = Date.now();
-  if (lastTimeChecked && currentTime - lastTimeChecked < 1000) {
+  if (
+    lastTimeClipboardChecked &&
+    currentTime - lastTimeClipboardChecked < 1000
+  ) {
     return;
   }
-  lastTimeChecked = currentTime;
+  lastTimeClipboardChecked = currentTime;
 
   let clipboardType: ClipboardType;
   let clipboardText: ClipboardText;
@@ -463,45 +467,43 @@ const initialize = async () => {
     config.get("receiveFiles", true)
   ) {
     // Watches for files and reads clipboard from it
-    clipboardFilesWatcher = await watcher.subscribe(
-      syncFolder,
-      async (error, events) => {
-        if (error) {
-          console.error(`Error watching clipboard files: ${error}`);
-        }
 
-        if (!events) {
+    // Prevents events for files that previously existed
+    lastTimeFilesChecked = Date.now();
+
+    clipboardFilesWatcher = watch(
+      syncFolder,
+      { recursive: true },
+      (eventType: "rename" | "change", filename: string) => {
+        if (eventType !== "change") {
           return;
         }
 
-        const parsedFiles: ParsedClipboardFileName[] = [];
-
-        // Execute readCLipboardFromFile only if there is a "create" event and the file is valid
-        for (const event of events) {
-          if (event.type === "create") {
-            const parsedFile = parseClipboardFileName(
-              event.path,
-              syncFolder,
-              "from-others"
-            );
-            if (parsedFile) {
-              parsedFiles.push(parsedFile);
-            }
-          }
-        }
-
-        if (parsedFiles.length > 0) {
-          // Sort events descending by number
-          parsedFiles.sort((a, b) => b.number - a.number);
-          // Read the clipboard from the most recent file
-          await readClipboardFromFile(parsedFiles[0]);
-        }
-      },
-      {
-        backend: "watchman",
         // This filters out temporary files created by the OneDrive client, example:
         // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt.json~RF1a1c3c.TMP"
-        ignore: ["**/*~*.TMP"],
+        if (filename.match(/~RF[0-9a-f]+\.TMP$/)) {
+          return;
+        }
+
+        // Prevents duplicated events
+        const currentTime = Date.now();
+        if (lastTimeFilesChecked && currentTime - lastTimeFilesChecked < 1000) {
+          return;
+        }
+        lastTimeFilesChecked = currentTime;
+
+        const parsedFile = parseClipboardFileName(
+          path.join(syncFolder, filename),
+          syncFolder,
+          "from-others"
+        );
+
+        if (!parsedFile) {
+          return;
+        }
+
+        // Wait 200ms so that file is fully written
+        setTimeout(() => readClipboardFromFile(parsedFile), 200);
       }
     );
 
@@ -537,7 +539,7 @@ const cleanup = async () => {
   }
 
   if (clipboardFilesWatcher) {
-    await clipboardFilesWatcher.unsubscribe();
+    clipboardFilesWatcher.unref();
     clipboardFilesWatcher = null;
   }
 
