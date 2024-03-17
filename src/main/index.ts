@@ -537,7 +537,7 @@ const cleanup = async () => {
   }
 
   if (clipboardFilesWatcher) {
-    clipboardFilesWatcher.unsubscribe();
+    await clipboardFilesWatcher.unsubscribe();
     clipboardFilesWatcher = null;
   }
 
