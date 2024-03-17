@@ -95,19 +95,13 @@ export const getNextFileNumber = async (syncFolder: string) => {
 };
 
 export const isThereMoreThanOneClipboardFile = async (syncFolder: string) => {
-  let found = 0;
   const files = await fs.readdir(syncFolder);
   for (const file of files) {
-    const filePath = path.join(syncFolder, file);
-    const parsedFile = parseClipboardFileName(filePath, syncFolder);
-    if (parsedFile) {
-      found++;
-      if (found > 1) {
-        return true;
-      }
+    if (parseClipboardFileName(path.join(syncFolder, file), syncFolder)) {
+      return true;
     }
   }
-  return found > 1;
+  return false;
 };
 
 export const isIsReceivingFile = (file: string) => {

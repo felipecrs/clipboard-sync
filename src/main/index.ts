@@ -83,12 +83,15 @@ let appIcon: Tray = null;
 
 let syncFolder: string = null;
 
-let lastFileNumberWritten: number = null;
-
 let lastTextRead: ClipboardText = null;
 let lastImageSha256Read: string = null;
 let lastClipboardFilePathsRead: string[] = null;
 let lastTimeRead: number = null;
+
+let lastTextWritten: ClipboardText = null;
+let lastImageSha256Written: string = null;
+let lastTimeWritten: number = null;
+let lastFileNumberWritten: number = null;
 
 let clipboardListener: ClipboardEventListener = null;
 let clipboardFilesWatcher: StatWatcher = null;
@@ -99,6 +102,8 @@ let lastTimeClipboardChecked: number = null;
 let lastTimeFilesChecked: number = null;
 
 const writeClipboardToFile = async () => {
+  const currentTime = Date.now();
+
   // Avoids sending the clipboard if there is no other computer receiving
   if (
     (await fs.readdir(syncFolder)).filter(
@@ -110,16 +115,6 @@ const writeClipboardToFile = async () => {
     );
     return;
   }
-
-  // Prevents duplicated clipboard events
-  const currentTime = Date.now();
-  if (
-    lastTimeClipboardChecked &&
-    currentTime - lastTimeClipboardChecked < 1000
-  ) {
-    return;
-  }
-  lastTimeClipboardChecked = currentTime;
 
   let clipboardType: ClipboardType;
   let clipboardText: ClipboardText;
@@ -172,13 +167,16 @@ const writeClipboardToFile = async () => {
     return;
   }
 
-  // Prevent sending the clipboard that was just received
+  // Prevent sending the clipboard that was just received, or resend the same clipboard too quickly
   if (
     clipboardType === "text" &&
     (isClipboardTextEmpty(clipboardText) ||
       (lastTimeRead &&
         currentTime - lastTimeRead < 5000 &&
-        isClipboardTextEquals(lastTextRead, clipboardText)))
+        isClipboardTextEquals(lastTextRead, clipboardText)) ||
+      (lastTimeWritten &&
+        currentTime - lastTimeWritten < 10000 &&
+        isClipboardTextEquals(lastTextWritten, clipboardText)))
   ) {
     return;
   }
@@ -188,7 +186,10 @@ const writeClipboardToFile = async () => {
     (!clipboardImage ||
       (lastTimeRead &&
         currentTime - lastTimeRead < 5000 &&
-        lastImageSha256Read === clipboardImageSha256))
+        lastImageSha256Read === clipboardImageSha256) ||
+      (lastTimeWritten &&
+        currentTime - lastTimeWritten < 10000 &&
+        lastImageSha256Written === clipboardImageSha256))
   ) {
     return;
   }
@@ -218,9 +219,11 @@ const writeClipboardToFile = async () => {
         encoding: "utf8",
       }
     );
+    lastTextWritten = clipboardText;
   } else if (clipboardType === "image") {
     destinationPath = path.join(syncFolder, `${fileNumber}-${hostName}.png`);
     await fs.writeFile(destinationPath, clipboardImage);
+    lastImageSha256Written = clipboardImageSha256;
   } else if (clipboardType === "files") {
     filesCount = await getTotalNumberOfFiles(clipboardFilePaths);
     destinationPath = path.join(
@@ -241,6 +244,7 @@ const writeClipboardToFile = async () => {
     }
   }
   console.log(`Clipboard written to ${destinationPath}`);
+  lastTimeWritten = currentTime;
   lastFileNumberWritten = fileNumber;
 
   setIconFor5Seconds("clipboard_sent");
@@ -454,11 +458,20 @@ const initialize = async () => {
   ) {
     clipboardListener = (await import("clipboard-event")).default;
     clipboardListener.startListening();
-    clipboardListener.on(
-      "change",
+    clipboardListener.on("change", () => {
+      // Prevents duplicated clipboard events
+      const currentTime = Date.now();
+      if (
+        lastTimeClipboardChecked &&
+        currentTime - lastTimeClipboardChecked < 1000
+      ) {
+        return;
+      }
+      lastTimeClipboardChecked = currentTime;
+
       // Wait 100ms so that clipboard is fully written
-      () => setTimeout(writeClipboardToFile, 100)
-    );
+      setTimeout(writeClipboardToFile, 100);
+    });
   }
 
   if (
