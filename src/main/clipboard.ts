@@ -94,10 +94,15 @@ export const getNextFileNumber = async (syncFolder: string) => {
   return 1;
 };
 
-export const isThereMoreThanOneClipboardFile = async (syncFolder: string) => {
+export const isThereMoreThanOneClipboardFile = async (
+  syncFolder: string,
+  filter: "none" | "from-others" | "from-myself" = "none"
+) => {
   const files = await fs.readdir(syncFolder);
   for (const file of files) {
-    if (parseClipboardFileName(path.join(syncFolder, file), syncFolder)) {
+    if (
+      parseClipboardFileName(path.join(syncFolder, file), syncFolder, filter)
+    ) {
       return true;
     }
   }
