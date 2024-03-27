@@ -1,33 +1,34 @@
-import fs from "node:fs/promises";
-import { watch, StatWatcher } from "node:fs";
-import path from "node:path";
+import type { ClipboardEventListener } from "clipboard-event";
 import {
+  Menu,
+  Notification,
+  Tray,
   app,
   clipboard,
   dialog,
-  Menu,
   nativeImage,
-  Notification,
   shell,
-  Tray,
 } from "electron";
 import clipboardEx from "electron-clipboard-ex";
+import log from "electron-log";
 import Store from "electron-store";
 import cron from "node-cron";
+import { StatWatcher, watch } from "node:fs";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { gt as semverGreaterThan } from "semver";
-import type { ClipboardEventListener } from "clipboard-event";
 
 import {
-  cleanFiles,
-  parseClipboardFileName,
-  getNextFileNumber as getNextFileNumber,
-  isThereMoreThanOneClipboardFile,
-  isIsReceivingFile,
-  ClipboardType,
   ClipboardText,
-  isClipboardTextEquals,
-  isClipboardTextEmpty,
+  ClipboardType,
   ParsedClipboardFileName,
+  cleanFiles,
+  getNextFileNumber,
+  isClipboardTextEmpty,
+  isClipboardTextEquals,
+  isIsReceivingFile,
+  isThereMoreThanOneClipboardFile,
+  parseClipboardFileName,
 } from "./clipboard.js";
 import { hostName, hostNameIsReceivingFileName } from "./global.js";
 import {
@@ -41,18 +42,19 @@ import {
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if ((await import("electron-squirrel-startup")).default) {
+  console.error("Squirrel event handled. Quitting...");
   app.exit();
 }
 
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
+  console.error("Another instance is already running. Quitting...");
   app.exit();
 }
 
-process.on("uncaughtException", function (error) {
-  console.error(`Uncaught exception: ${error}`);
-});
+log.errorHandler.startCatching({ showDialog: false });
+log.eventLogger.startLogging();
 
 type ConfigType = {
   folder?: string;
@@ -110,7 +112,7 @@ const writeClipboardToFile = async () => {
       (file) => isIsReceivingFile(file) && file !== hostNameIsReceivingFileName
     ).length === 0
   ) {
-    console.error(
+    log.info(
       "No other computer is receiving clipboards. Skipping clipboard send..."
     );
     return;
@@ -159,7 +161,7 @@ const writeClipboardToFile = async () => {
       clipboardType = "files";
     }
   } catch (error) {
-    console.error("Error reading current clipboard");
+    log.error(`Error reading current clipboard:\n${error}`);
     return;
   }
 
@@ -243,7 +245,7 @@ const writeClipboardToFile = async () => {
       }
     }
   }
-  console.log(`Clipboard written to ${destinationPath}`);
+  log.info(`Clipboard written to ${destinationPath}`);
   lastTimeWritten = currentTime;
   lastFileNumberWritten = fileNumber;
 
@@ -284,14 +286,13 @@ const readClipboardFromFile = async (parsedFile: ParsedClipboardFileName) => {
       }
       newFilesCount = parsedFile.filesCount;
       if (!newFilesCount) {
-        console.error(
-          `Could not read the number of files in ${file}. Skipping...`
-        );
+        // This should not happen, but just in case
+        log.warn(`Could not read the number of files in ${file}. Skipping...`);
         return;
       }
       const filesCountInFolder = await getTotalNumberOfFiles([file]);
       if (newFilesCount !== filesCountInFolder) {
-        console.error(
+        log.info(
           `Not all files are yet present in _files folder. Current: ${filesCountInFolder}, expected: ${newFilesCount}. Skipping...`
         );
         return;
@@ -301,7 +302,7 @@ const readClipboardFromFile = async (parsedFile: ParsedClipboardFileName) => {
       );
     }
   } catch (error) {
-    console.error(`Error reading clipboard from file ${file}: ${error}`);
+    log.error(`Error reading clipboard ${file}:\n${error}`);
     return;
   }
 
@@ -338,7 +339,7 @@ const readClipboardFromFile = async (parsedFile: ParsedClipboardFileName) => {
       currentClipboardType = "files";
     }
   } catch (error) {
-    console.error(`Error reading current clipboard: ${error}`);
+    log.error(`Error reading current clipboard: ${error}`);
     return;
   }
 
@@ -370,6 +371,9 @@ const readClipboardFromFile = async (parsedFile: ParsedClipboardFileName) => {
     lastFileNumberWritten &&
     currentFileNumber < lastFileNumberWritten
   ) {
+    log.info(
+      `Skipping reading clipboard from ${file} as a newer clipboard was already sent`
+    );
     return;
   }
 
@@ -383,7 +387,7 @@ const readClipboardFromFile = async (parsedFile: ParsedClipboardFileName) => {
     clipboardEx.writeFilePaths(newFilePaths);
     lastClipboardFilePathsRead = newFilePaths;
   }
-  console.log(`Clipboard was read from ${file}`);
+  log.info(`Clipboard was read from ${file}`);
   lastTimeRead = currentTime;
 
   setIconFor5Seconds("clipboard_received");
@@ -563,7 +567,7 @@ const cleanup = async () => {
 };
 
 const reload = async () => {
-  console.log("Reloading configuration...");
+  log.info("Reloading configuration...");
   await cleanup();
   await initialize();
 };
@@ -622,7 +626,7 @@ const isUpdateAvailable = async () => {
       path: "/felipecrs/clipboard-sync/releases/latest",
     });
   } catch (error) {
-    console.error(`Could not get latest version from GitHub: ${error}`);
+    log.error(`Could not get latest version from GitHub:\n${error}`);
     return false;
   }
 

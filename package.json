@@ -7,7 +7,7 @@
   "main": "dist/main/index.js",
   "scripts": {
     "clean": "rimraf dist out",
-    "start": "electron-vite preview",
+    "start": "electron-vite preview --sourcemap",
     "dev": "electron-vite dev",
     "package": "electron-vite build && electron-forge package",
     "make": "electron-vite build && electron-forge make",
@@ -27,6 +27,7 @@
   "dependencies": {
     "clipboard-event": "^1.6.0",
     "electron-clipboard-ex": "^1.3.3",
+    "electron-log": "^5.1.2",
     "electron-squirrel-startup": "^1.0.0",
     "electron-store": "^8.2.0",
     "follow-redirects": "^1.15.6",

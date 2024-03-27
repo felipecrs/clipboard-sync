@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import fswin from "fswin";
+import log from "electron-log";
 
 import { hostName, isReceivingFileNameSuffix } from "./global.js";
 import {
@@ -140,7 +141,7 @@ export const cleanFiles = async (syncFolder: string) => {
           /^((0|[1-9][0-9]*)-[0-9a-zA-Z-]+\.txt)|(receiving-[0-9a-zA-Z-]+\.txt)|([0-9a-zA-Z-]+\.is-reading\.txt)$/
         );
       if (match) {
-        console.log(`Deleting file used by previous versions: ${filePath}`);
+        log.info(`Deleting file used by previous versions: ${filePath}`);
         await deleteFileOrFolderRecursively(filePath);
       }
       continue;
@@ -148,7 +149,7 @@ export const cleanFiles = async (syncFolder: string) => {
 
     const fileStat = await fs.lstat(filePath);
     if (fileStat.ctime.getTime() <= currentTimeMinus5Min) {
-      console.log(`Deleting: ${filePath}`);
+      log.info(`Deleting: ${filePath}`);
       await deleteFileOrFolderRecursively(filePath);
       continue;
     }
@@ -159,7 +160,7 @@ export const cleanFiles = async (syncFolder: string) => {
       parsedFile.from === "others" &&
       fileStat.ctime.getTime() <= currentTimeMinus1Min
     ) {
-      console.log(`Unsyncing: ${filePath}`);
+      log.info(`Unsyncing: ${filePath}`);
       unsyncFileOrFolderRecursively(filePath);
     }
   }
