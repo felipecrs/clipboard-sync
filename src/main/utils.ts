@@ -4,6 +4,7 @@ import { RequestOptions } from "node:https";
 import { promisify } from "node:util";
 import { createHash } from "node:crypto";
 import followRedirects from "follow-redirects";
+import log from "electron-log";
 
 export const isArrayEquals = (arr1?: any[], arr2?: any[]) => {
   if (arr1 && arr2 && arr1.length == arr2.length) {
@@ -42,7 +43,7 @@ export const iterateThroughFilesRecursively = async (
         }
       }
     } catch (err) {
-      console.error(err);
+      log.error(`Error while iterating through ${fileOrFolder}:\n${err}`);
     }
   }
   return results;
@@ -88,7 +89,7 @@ export const deleteFileOrFolderRecursively = async (fileOrFolder: string) => {
       await fs.unlink(fileOrFolder);
     }
   } catch (err) {
-    console.error(err);
+    log.error(`Error deleting ${fileOrFolder}:\n${err}`);
   }
 };
 

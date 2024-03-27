@@ -5,7 +5,6 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       outDir: "dist/main",
-      minify: true,
     },
   },
 });
