@@ -366,7 +366,7 @@ const readClipboardFromFile = async (parsedFile: ParsedClipboardFileName) => {
   // Skips the read if a newer clipboard was already sent, which can happen if
   // OneDrive takes too long to sync
   if (
-    isThereMoreThanOneClipboardFile(syncFolder, "from-myself") &&
+    (await isThereMoreThanOneClipboardFile(syncFolder, "from-myself")) &&
     lastFileNumberWritten &&
     currentFileNumber < lastFileNumberWritten
   ) {
