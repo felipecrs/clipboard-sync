@@ -808,16 +808,6 @@ const createAppIcon = async () => {
     shell.openPath(syncFolder);
   });
 
-  // Set PATH to include bundled watchman binaries
-  const watchmanBinDir = path.resolve(
-    path.join(
-      app.getAppPath(),
-      `resources/binaries/${process.platform}/${process.arch}/watchman`
-    )
-  );
-
-  process.env.PATH = `${process.env.PATH};${watchmanBinDir}`;
-
   await initialize();
 
   await autoCheckForUpdates();
