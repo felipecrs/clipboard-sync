@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import fswin from "fswin";
 import log from "electron-log";
 
@@ -119,7 +120,7 @@ export const isIsReceivingFile = (file: string) => {
 // And removes from-others files older than 10 minutes.
 export const cleanFiles = async (syncFolder: string) => {
   const now = Date.now();
-  const currentTimeMinus1Min = now - 60000;
+  const currentTimeMinus1Min = now - 6000;
   const currentTimeMinus5Min = now - 300000;
 
   const files = await fs.readdir(syncFolder);
@@ -161,14 +162,31 @@ export const cleanFiles = async (syncFolder: string) => {
       fileStat.ctime.getTime() <= currentTimeMinus1Min
     ) {
       log.info(`Unsyncing: ${filePath}`);
-      unsyncFileOrFolderRecursively(filePath);
+      await unsyncFileOrFolderRecursively(filePath);
     }
   }
 };
 
-export const unsyncFileOrFolderRecursively = (fileOrFolder: string) => {
-  iterateThroughFilesRecursively([fileOrFolder], (file) => {
-    fswin.setAttributesSync(file, {
+export const unsyncFileOrFolderRecursively = async (fileOrFolder: string) => {
+  // Create a wrapper function for fsWin.setAttributes that follows the Node.js callback pattern
+  function setAttributesWrapper(
+    path: string,
+    attributes: fswin.SetAttributes,
+    callback: (arg0: Error, arg1: null) => void
+  ) {
+    fswin.setAttributes(path, attributes, function (succeeded) {
+      if (succeeded) {
+        callback(null, null);
+      } else {
+        callback(new Error(`Failed to set attributes of ${path}`), null);
+      }
+    });
+  }
+
+  const setAttributesAsync = promisify(setAttributesWrapper);
+
+  await iterateThroughFilesRecursively([fileOrFolder], async (file) => {
+    await setAttributesAsync(file, {
       IS_UNPINNED: true,
       IS_PINNED: false,
     });
