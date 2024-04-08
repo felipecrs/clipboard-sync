@@ -56,6 +56,11 @@ if (!gotTheLock) {
 log.errorHandler.startCatching({ showDialog: false });
 log.eventLogger.startLogging();
 
+if (process.platform === "darwin") {
+  // This is just during development, because LSUIElement=1 already handles this on the packaged application
+  app.dock.hide()
+}
+
 type ConfigType = {
   folder?: string;
   sendTexts: boolean;
@@ -433,8 +438,7 @@ const initialize = async () => {
   }
 
   try {
-    const stats = await fs.lstat(syncFolder);
-    if (!syncFolder || !stats.isDirectory()) {
+    if (!syncFolder || !(await fs.lstat(syncFolder)).isDirectory()) {
       askForFolder();
     }
   } catch (error) {
@@ -576,8 +580,6 @@ const getAppIcon = () => {
   const iconExtension =
     process.platform === "win32"
       ? "ico"
-      : process.platform === "darwin"
-      ? "icns"
       : "png";
 
   return path.resolve(

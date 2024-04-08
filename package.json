@@ -20,9 +20,6 @@
     "email": "felipecassiors@gmail.com"
   },
   "license": "MIT",
-  "config": {
-    "forge": "./forge.config.js"
-  },
   "repository": "https://github.com/felipecrs/clipboard-sync.git",
   "dependencies": {
     "clipboard-event": "^1.6.0",
