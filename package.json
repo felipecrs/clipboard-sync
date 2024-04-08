@@ -6,6 +6,7 @@
   "type": "module",
   "main": "dist/main/index.js",
   "scripts": {
+    "prepare": "node ./tools/prepare.js",
     "clean": "rimraf dist out",
     "start": "electron-vite preview --sourcemap",
     "dev": "electron-vite dev",
@@ -20,9 +21,6 @@
     "email": "felipecassiors@gmail.com"
   },
   "license": "MIT",
-  "config": {
-    "forge": "./forge.config.js"
-  },
   "repository": "https://github.com/felipecrs/clipboard-sync.git",
   "dependencies": {
     "clipboard-event": "^1.6.0",
@@ -37,16 +35,21 @@
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.3.1",
+    "@electron-forge/maker-dmg": "^7.3.1",
     "@electron-forge/maker-squirrel": "^7.3.1",
     "@electron-toolkit/tsconfig": "^1.0.1",
     "@types/electron-squirrel-startup": "^1.0.2",
     "@types/follow-redirects": "^1.14.4",
     "@types/node-cron": "^3.0.11",
     "@types/semver": "^7.5.8",
-    "electron": "^29.1.6",
+    "electron": "^29.2.0",
     "electron-vite": "^2.1.0",
     "rimraf": "^5.0.5",
-    "typescript": "^5.4.3",
-    "vite": "^5.2.6"
+    "typescript": "^5.4.4",
+    "vite": "^5.2.8"
+  },
+  "volta": {
+    "node": "20.12.1",
+    "npm": "10.5.1"
   }
 }

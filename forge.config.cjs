@@ -1,3 +1,7 @@
+// @ts-check
+
+const MakerDmg = require("@electron-forge/maker-dmg").default;
+const MakerSquirrel = require("@electron-forge/maker-squirrel").default;
 const path = require("node:path");
 
 const getAppIcon = () => {
@@ -14,23 +18,28 @@ const getAppIcon = () => {
   );
 };
 
+/** @type {import("@electron-forge/shared-types").ForgeConfig} */
 module.exports = {
   packagerConfig: {
-    icon: getAppIcon(),
+    icon: getAppIcon(process.platform),
     ignore: [
       /^\/(src)|(tools)|(.github)|(.vscode)/,
       /\/(.eslintrc.json)|(.gitignore)|(.gitattributes)|(electron.vite.config.ts)|(forge.config.cjs)|(tsconfig.json)|(bindl.config.js)|(bindl.config.js)|(README.md)$/,
     ],
+    // Prevents the app from showing up in the dock on macOS
+    extendInfo: {
+      LSUIElement: true,
+    },
   },
   rebuildConfig: {},
   makers: [
-    {
-      name: "@electron-forge/maker-squirrel",
-      config: {
-        name: "clipboard_sync",
-        setupIcon: getAppIcon(),
-        iconUrl: getAppIcon(),
-      },
-    },
+    new MakerSquirrel({
+      name: "clipboard_sync",
+      setupIcon: getAppIcon(),
+      iconUrl: getAppIcon(),
+    }),
+    new MakerDmg({
+      icon: getAppIcon(),
+    }),
   ],
 };

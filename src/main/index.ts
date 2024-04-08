@@ -56,6 +56,11 @@ if (!gotTheLock) {
 log.errorHandler.startCatching({ showDialog: false });
 log.eventLogger.startLogging();
 
+if (process.platform === "darwin") {
+  // This is just during development, because LSUIElement=1 already handles this on the packaged application
+  app.dock.hide();
+}
+
 type ConfigType = {
   folder?: string;
   sendTexts: boolean;
@@ -127,7 +132,22 @@ const writeClipboardToFile = async () => {
   const clipboardFormats = clipboard.availableFormats();
 
   try {
-    if (
+    // macOS writes text/plain even for uri-list and image/png, so we check
+    // them before checking for text/plain
+    if (clipboardFormats.includes("text/uri-list")) {
+      if (!config.get("sendFiles", true)) {
+        return;
+      }
+      clipboardFilePaths = clipboardEx.readFilePaths();
+      clipboardType = "files";
+    } else if (clipboardFormats.includes("image/png")) {
+      if (!config.get("sendImages", true)) {
+        return;
+      }
+      clipboardImage = clipboard.readImage().toPNG();
+      clipboardImageSha256 = calculateSha256(clipboardImage);
+      clipboardType = "image";
+    } else if (
       clipboardFormats.includes("text/plain") ||
       clipboardFormats.includes("text/html") ||
       clipboardFormats.includes("text/rtf")
@@ -146,19 +166,6 @@ const writeClipboardToFile = async () => {
         clipboardText.rtf = clipboard.readRTF() ?? undefined;
       }
       clipboardType = "text";
-    } else if (clipboardFormats.includes("image/png")) {
-      if (!config.get("sendImages", true)) {
-        return;
-      }
-      clipboardImage = clipboard.readImage().toPNG();
-      clipboardImageSha256 = calculateSha256(clipboardImage);
-      clipboardType = "image";
-    } else if (clipboardFormats.includes("text/uri-list")) {
-      if (!config.get("sendFiles", true)) {
-        return;
-      }
-      clipboardFilePaths = clipboardEx.readFilePaths();
-      clipboardType = "files";
     }
   } catch (error) {
     log.error(`Error reading current clipboard:\n${error}`);
@@ -166,6 +173,7 @@ const writeClipboardToFile = async () => {
   }
 
   if (!clipboardType) {
+    log.warn(`Unknown clipboard format: ${clipboardFormats}`);
     return;
   }
 
@@ -314,7 +322,16 @@ const readClipboardFromFile = async (parsedFile: ParsedClipboardFileName) => {
 
   const clipboardFormats = clipboard.availableFormats();
   try {
-    if (
+    // macOS writes text/plain even for uri-list and image/png, so we check
+    // them before checking for text/plain
+    if (clipboardFormats.includes("text/uri-list")) {
+      currentFilePaths = clipboardEx.readFilePaths();
+      currentClipboardType = "files";
+    } else if (clipboardFormats.includes("image/png")) {
+      currentImage = clipboard.readImage().toPNG();
+      currentImageSha256 = calculateSha256(currentImage);
+      currentClipboardType = "image";
+    } else if (
       clipboardFormats.includes("text/plain") ||
       clipboardFormats.includes("text/html") ||
       clipboardFormats.includes("text/rtf")
@@ -330,13 +347,6 @@ const readClipboardFromFile = async (parsedFile: ParsedClipboardFileName) => {
         currentText.rtf = clipboard.readRTF() ?? undefined;
       }
       currentClipboardType = "text";
-    } else if (clipboardFormats.includes("image/png")) {
-      currentImage = clipboard.readImage().toPNG();
-      currentImageSha256 = calculateSha256(currentImage);
-      currentClipboardType = "image";
-    } else if (clipboardFormats.includes("text/uri-list")) {
-      currentFilePaths = clipboardEx.readFilePaths();
-      currentClipboardType = "files";
     }
   } catch (error) {
     log.error(`Error reading current clipboard: ${error}`);
@@ -433,8 +443,7 @@ const initialize = async () => {
   }
 
   try {
-    const stats = await fs.lstat(syncFolder);
-    if (!syncFolder || !stats.isDirectory()) {
+    if (!syncFolder || !(await fs.lstat(syncFolder)).isDirectory()) {
       askForFolder();
     }
   } catch (error) {
@@ -653,12 +662,17 @@ const checkForUpdatesPress = async () => {
       body: "Opening download page...",
       icon: getAppIcon(),
     }).show();
+    const baseUrl = "https://github.com/felipecrs/clipboard-sync/releases";
     if (process.platform === "win32") {
       shell.openExternal(
-        `https://github.com/felipecrs/clipboard-sync/releases/download/v${update.newVersion}/Clipboard.Sync-${update.newVersion}.Setup.exe`
+        `${baseUrl}/download/v${update.newVersion}/Clipboard.Sync-${update.newVersion}.Setup.exe`
+      );
+    } else if (process.platform === "darwin") {
+      shell.openExternal(
+        `${baseUrl}/download/v${update.newVersion}/Clipboard.Sync-${update.newVersion}-x64.dmg`
       );
     }
-    shell.openExternal("https://github.com/felipecrs/clipboard-sync/releases");
+    shell.openExternal(baseUrl);
   } else {
     new Notification({
       title: "No updates found",
