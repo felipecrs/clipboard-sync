@@ -132,7 +132,22 @@ const writeClipboardToFile = async () => {
   const clipboardFormats = clipboard.availableFormats();
 
   try {
-    if (
+    // macOS writes text/plain even for uri-list and image/png, so we check
+    // them before checking for text/plain
+    if (clipboardFormats.includes("text/uri-list")) {
+      if (!config.get("sendFiles", true)) {
+        return;
+      }
+      clipboardFilePaths = clipboardEx.readFilePaths();
+      clipboardType = "files";
+    } else if (clipboardFormats.includes("image/png")) {
+      if (!config.get("sendImages", true)) {
+        return;
+      }
+      clipboardImage = clipboard.readImage().toPNG();
+      clipboardImageSha256 = calculateSha256(clipboardImage);
+      clipboardType = "image";
+    } else if (
       clipboardFormats.includes("text/plain") ||
       clipboardFormats.includes("text/html") ||
       clipboardFormats.includes("text/rtf")
@@ -151,19 +166,6 @@ const writeClipboardToFile = async () => {
         clipboardText.rtf = clipboard.readRTF() ?? undefined;
       }
       clipboardType = "text";
-    } else if (clipboardFormats.includes("image/png")) {
-      if (!config.get("sendImages", true)) {
-        return;
-      }
-      clipboardImage = clipboard.readImage().toPNG();
-      clipboardImageSha256 = calculateSha256(clipboardImage);
-      clipboardType = "image";
-    } else if (clipboardFormats.includes("text/uri-list")) {
-      if (!config.get("sendFiles", true)) {
-        return;
-      }
-      clipboardFilePaths = clipboardEx.readFilePaths();
-      clipboardType = "files";
     }
   } catch (error) {
     log.error(`Error reading current clipboard:\n${error}`);
@@ -171,6 +173,7 @@ const writeClipboardToFile = async () => {
   }
 
   if (!clipboardType) {
+    log.warn(`Unknown clipboard format: ${clipboardFormats}`);
     return;
   }
 
@@ -319,7 +322,16 @@ const readClipboardFromFile = async (parsedFile: ParsedClipboardFileName) => {
 
   const clipboardFormats = clipboard.availableFormats();
   try {
-    if (
+    // macOS writes text/plain even for uri-list and image/png, so we check
+    // them before checking for text/plain
+    if (clipboardFormats.includes("text/uri-list")) {
+      currentFilePaths = clipboardEx.readFilePaths();
+      currentClipboardType = "files";
+    } else if (clipboardFormats.includes("image/png")) {
+      currentImage = clipboard.readImage().toPNG();
+      currentImageSha256 = calculateSha256(currentImage);
+      currentClipboardType = "image";
+    } else if (
       clipboardFormats.includes("text/plain") ||
       clipboardFormats.includes("text/html") ||
       clipboardFormats.includes("text/rtf")
@@ -335,13 +347,6 @@ const readClipboardFromFile = async (parsedFile: ParsedClipboardFileName) => {
         currentText.rtf = clipboard.readRTF() ?? undefined;
       }
       currentClipboardType = "text";
-    } else if (clipboardFormats.includes("image/png")) {
-      currentImage = clipboard.readImage().toPNG();
-      currentImageSha256 = calculateSha256(currentImage);
-      currentClipboardType = "image";
-    } else if (clipboardFormats.includes("text/uri-list")) {
-      currentFilePaths = clipboardEx.readFilePaths();
-      currentClipboardType = "files";
     }
   } catch (error) {
     log.error(`Error reading current clipboard: ${error}`);
