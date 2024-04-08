@@ -120,8 +120,6 @@ export const isIsReceivingFile = (file: string) => {
 // And removes from-others files older than 10 minutes.
 export const cleanFiles = async (syncFolder: string) => {
   const now = Date.now();
-  const currentTimeMinus1Min = now - 6000;
-  const currentTimeMinus5Min = now - 300000;
 
   const files = await fs.readdir(syncFolder);
   for (const file of files) {
@@ -148,8 +146,12 @@ export const cleanFiles = async (syncFolder: string) => {
       continue;
     }
 
+    // Delete from myself files older than 5 minutes and
+    // from others older than 10 minutes
+    const timeThreshold = parsedFile.from === "myself" ? now - 300000 : now - 600000;
+
     const fileStat = await fs.lstat(filePath);
-    if (fileStat.ctime.getTime() <= currentTimeMinus5Min) {
+    if (fileStat.ctime.getTime() <= timeThreshold) {
       log.info(`Deleting: ${filePath}`);
       await deleteFileOrFolderRecursively(filePath);
       continue;
@@ -159,16 +161,27 @@ export const cleanFiles = async (syncFolder: string) => {
     if (
       process.platform === "win32" &&
       parsedFile.from === "others" &&
-      fileStat.ctime.getTime() <= currentTimeMinus1Min
+      fileStat.ctime.getTime() <= now - 60000
     ) {
-      log.info(`Unsyncing: ${filePath}`);
       await unsyncFileOrFolderRecursively(filePath);
     }
   }
 };
 
 export const unsyncFileOrFolderRecursively = async (fileOrFolder: string) => {
-  // Create a wrapper function for fsWin.setAttributes that follows the Node.js callback pattern
+  function getAttributesWrapper(
+    path: string,
+    callback: (arg0: Error, arg1: fswin.Attributes) => void
+  ) {
+    fswin.getAttributes(path, function (result) {
+      if (result) {
+        callback(null, result);
+      } else {
+        callback(new Error(`Failed to set attributes of ${path}`), null);
+      }
+    });
+  }
+
   function setAttributesWrapper(
     path: string,
     attributes: fswin.SetAttributes,
@@ -183,13 +196,19 @@ export const unsyncFileOrFolderRecursively = async (fileOrFolder: string) => {
     });
   }
 
+  const getAttributesAsync = promisify(getAttributesWrapper);
   const setAttributesAsync = promisify(setAttributesWrapper);
 
   await iterateThroughFilesRecursively([fileOrFolder], async (file) => {
-    await setAttributesAsync(file, {
-      IS_UNPINNED: true,
-      IS_PINNED: false,
-    });
+    // Only unsync file if it has IS_REPARSE_POINT attribute
+    if ((await getAttributesAsync(file)).IS_REPARSE_POINT) {
+      log.info(`Unsyncing: ${file}`);
+      await setAttributesAsync(file, {
+        IS_UNPINNED: true,
+        IS_PINNED: false,
+      });
+      return;
+    }
   });
 };
 
