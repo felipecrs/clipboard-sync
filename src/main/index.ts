@@ -669,7 +669,7 @@ const checkForUpdatesPress = async () => {
       );
     } else if (process.platform === "darwin") {
       shell.openExternal(
-        `${baseUrl}/download/v${update.newVersion}/Clipboard+Sync-${update.newVersion}-x64.dmg`
+        `${baseUrl}/download/v${update.newVersion}/Clipboard.Sync-${update.newVersion}-x64.dmg`
       );
     }
     shell.openExternal(baseUrl);
