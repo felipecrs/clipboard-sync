@@ -662,12 +662,17 @@ const checkForUpdatesPress = async () => {
       body: "Opening download page...",
       icon: getAppIcon(),
     }).show();
+    const baseUrl = "https://github.com/felipecrs/clipboard-sync/releases";
     if (process.platform === "win32") {
       shell.openExternal(
-        `https://github.com/felipecrs/clipboard-sync/releases/download/v${update.newVersion}/Clipboard.Sync-${update.newVersion}.Setup.exe`
+        `${baseUrl}/download/v${update.newVersion}/Clipboard.Sync-${update.newVersion}.Setup.exe`
+      );
+    } else if (process.platform === "darwin") {
+      shell.openExternal(
+        `${baseUrl}/download/v${update.newVersion}/Clipboard+Sync-${update.newVersion}-x64.dmg`
       );
     }
-    shell.openExternal("https://github.com/felipecrs/clipboard-sync/releases");
+    shell.openExternal(baseUrl);
   } else {
     new Notification({
       title: "No updates found",
