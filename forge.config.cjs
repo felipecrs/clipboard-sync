@@ -34,6 +34,7 @@ module.exports = {
         setupIcon: getAppIcon(),
         iconUrl: getAppIcon(),
       },
+      platforms: ["win32", "darwin"],
     },
   ],
 };
