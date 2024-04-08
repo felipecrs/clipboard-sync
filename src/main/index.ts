@@ -58,7 +58,7 @@ log.eventLogger.startLogging();
 
 if (process.platform === "darwin") {
   // This is just during development, because LSUIElement=1 already handles this on the packaged application
-  app.dock.hide()
+  app.dock.hide();
 }
 
 type ConfigType = {
@@ -580,6 +580,8 @@ const getAppIcon = () => {
   const iconExtension =
     process.platform === "win32"
       ? "ico"
+      : process.platform === "darwin"
+      ? "icns"
       : "png";
 
   return path.resolve(
