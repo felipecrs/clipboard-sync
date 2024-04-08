@@ -42,11 +42,11 @@
     "@types/follow-redirects": "^1.14.4",
     "@types/node-cron": "^3.0.11",
     "@types/semver": "^7.5.8",
-    "electron": "^29.1.6",
+    "electron": "^29.2.0",
     "electron-vite": "^2.1.0",
     "rimraf": "^5.0.5",
-    "typescript": "^5.4.3",
-    "vite": "^5.2.6"
+    "typescript": "^5.4.4",
+    "vite": "^5.2.8"
   },
   "volta": {
     "node": "20.12.1",
