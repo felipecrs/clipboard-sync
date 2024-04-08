@@ -72,6 +72,6 @@ If you want to build this project locally, you will need:
 2. `npm install` to install the dependencies
 3. `npm start` to build and run the project
 
-## References
+## Credits
 
-Icons made by [Freepik](https://www.flaticon.com/authors/freepik) and [Flat Icons](https://www.flaticon.com/authors/flat-icons) from [www.flaticon.com](https://www.flaticon.com/).
+The [original icon](https://www.flaticon.com/free-icon/clipboard_2542070) was made by [Freepik](https://www.flaticon.com/authors/freepik) distributed in [flaticon.com](https://www.flaticon.com/).
