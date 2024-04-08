@@ -74,4 +74,4 @@ If you want to build this project locally, you will need:
 
 ## Credits
 
-The [original icon](https://www.flaticon.com/free-icon/clipboard_2542070) was made by [Freepik](https://www.flaticon.com/authors/freepik) distributed in [flaticon.com](https://www.flaticon.com/).
+The [original icon](https://www.flaticon.com/free-icon/clipboard_2542070) was made by [Freepik](https://www.flaticon.com/authors/freepik).
