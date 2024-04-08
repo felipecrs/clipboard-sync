@@ -4,9 +4,13 @@ const MakerDmg = require("@electron-forge/maker-dmg").default;
 const MakerSquirrel = require("@electron-forge/maker-squirrel").default;
 const path = require("node:path");
 
-const getAppIcon = (/** @type {NodeJS.Platform} */ platform) => {
+const getAppIcon = () => {
   const iconExtension =
-    platform === "win32" ? "ico" : platform === "darwin" ? "icns" : "png";
+    process.platform === "win32"
+      ? "ico"
+      : process.platform === "darwin"
+      ? "icns"
+      : "png";
 
   return path.resolve(
     __dirname,
@@ -17,7 +21,7 @@ const getAppIcon = (/** @type {NodeJS.Platform} */ platform) => {
 /** @type {import("@electron-forge/shared-types").ForgeConfig} */
 module.exports = {
   packagerConfig: {
-    icon: getAppIcon(),
+    icon: getAppIcon(process.platform),
     ignore: [
       /^\/(src)|(tools)|(.github)|(.vscode)/,
       /\/(.eslintrc.json)|(.gitignore)|(.gitattributes)|(electron.vite.config.ts)|(forge.config.cjs)|(tsconfig.json)|(bindl.config.js)|(bindl.config.js)|(README.md)$/,
@@ -31,11 +35,11 @@ module.exports = {
   makers: [
     new MakerSquirrel({
       name: "clipboard_sync",
-      setupIcon: getAppIcon("win32"),
-      iconUrl: getAppIcon("win32"),
+      setupIcon: getAppIcon(),
+      iconUrl: getAppIcon(),
     }),
     new MakerDmg({
-      icon: getAppIcon("darwin"),
+      icon: getAppIcon(),
     }),
   ],
 };
