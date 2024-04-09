@@ -7,7 +7,7 @@
   "main": "dist/main/index.js",
   "scripts": {
     "prepare": "node ./tools/prepare.js",
-    "clean": "rimraf dist out .flatpak-builder",
+    "clean": "rimraf dist out",
     "start": "electron-vite preview --sourcemap",
     "dev": "electron-vite dev",
     "package": "electron-vite build && electron-forge package",
@@ -36,7 +36,6 @@
   "devDependencies": {
     "@electron-forge/cli": "^7.3.1",
     "@electron-forge/maker-dmg": "^7.3.1",
-    "@electron-forge/maker-flatpak": "^7.3.1",
     "@electron-forge/maker-squirrel": "^7.3.1",
     "@electron-toolkit/tsconfig": "^1.0.1",
     "@types/electron-squirrel-startup": "^1.0.2",

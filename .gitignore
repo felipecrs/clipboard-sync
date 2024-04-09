@@ -87,7 +87,6 @@ typings/
 
 # Electron-Forge
 out/
-.flatpak-builder/
 
 # Electron Vite
 dist/

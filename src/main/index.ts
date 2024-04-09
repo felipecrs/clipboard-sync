@@ -789,7 +789,6 @@ const setContextMenu = () => {
       label: updateLabel,
       type: "normal",
       click: checkForUpdatesPress,
-      visible: process.platform !== "linux",
     },
     {
       label: "GitHub",
@@ -831,9 +830,7 @@ const createAppIcon = async () => {
 
   await initialize();
 
-  if (process.platform !== "linux") {
-    await autoCheckForUpdates();
-  }
+  await autoCheckForUpdates();
 };
 
 // This method will be called when Electron has finished
