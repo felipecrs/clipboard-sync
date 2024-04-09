@@ -10,13 +10,14 @@ import {
   shell,
 } from "electron";
 import clipboardEx from "electron-clipboard-ex";
+import {setTimeout as setTimeoutAsync} from "timers/promises";
 import log from "electron-log";
 import Store from "electron-store";
 import cron from "node-cron";
-import { StatWatcher, watch } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { gt as semverGreaterThan } from "semver";
+import chokidar from "chokidar";
 
 import {
   ClipboardText,
@@ -101,12 +102,11 @@ let lastTimeWritten: number = null;
 let lastFileNumberWritten: number = null;
 
 let clipboardListener: ClipboardEventListener = null;
-let clipboardFilesWatcher: StatWatcher = null;
+let clipboardFilesWatcher: chokidar.FSWatcher = null;
 let filesCleanerTask: cron.ScheduledTask = null;
 let iconWaiter: NodeJS.Timeout = null;
 
 let lastTimeClipboardChecked: number = null;
-let lastTimeFilesChecked: number = null;
 
 const writeClipboardToFile = async () => {
   const currentTime = Date.now();
@@ -471,19 +471,21 @@ const initialize = async () => {
   ) {
     clipboardListener = (await import("clipboard-event")).default;
     clipboardListener.startListening();
-    clipboardListener.on("change", () => {
+    clipboardListener.on("change", async () => {
       // Prevents duplicated clipboard events
       const currentTime = Date.now();
       if (
         lastTimeClipboardChecked &&
-        currentTime - lastTimeClipboardChecked < 1000
+        currentTime - lastTimeClipboardChecked < 500
       ) {
         return;
       }
       lastTimeClipboardChecked = currentTime;
 
-      // Wait 100ms so that clipboard is fully written
-      setTimeout(writeClipboardToFile, 100);
+      // Wait a bit so that clipboard is fully written
+      await setTimeoutAsync(100);
+
+      await writeClipboardToFile();
     });
   }
 
@@ -493,33 +495,23 @@ const initialize = async () => {
     config.get("receiveFiles", true)
   ) {
     // Watches for files and reads clipboard from it
-
-    // Prevents events for files that previously existed
-    lastTimeFilesChecked = Date.now();
-
-    clipboardFilesWatcher = watch(
+    clipboardFilesWatcher = chokidar.watch(
       syncFolder,
-      { recursive: true },
-      (eventType: "rename" | "change", filename: string) => {
-        if (eventType !== "change") {
-          return;
-        }
-
-        // This filters out temporary files created by the OneDrive client, example:
-        // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt.json~RF1a1c3c.TMP"
-        if (filename.match(/~RF[0-9a-f]+\.TMP$/)) {
-          return;
-        }
-
-        // Prevents duplicated events
-        const currentTime = Date.now();
-        if (lastTimeFilesChecked && currentTime - lastTimeFilesChecked < 1000) {
-          return;
-        }
-        lastTimeFilesChecked = currentTime;
-
+      {
+        usePolling: config.get("usePolling", false),
+        interval: 1000,
+        binaryInterval: 1000,
+        ignoreInitial: true,
+        disableGlobbing: true,
+        ignored: [
+          // This filters out temporary files created by the OneDrive client, example:
+          // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt.json~RF1a1c3c.TMP"
+          "**/*~*.TMP"
+        ],
+      },
+    ).on("add", async (filename) => {
         const parsedFile = parseClipboardFileName(
-          path.join(syncFolder, filename),
+          filename,
           syncFolder,
           "from-others"
         );
@@ -528,8 +520,10 @@ const initialize = async () => {
           return;
         }
 
-        // Wait 200ms so that file is fully written
-        setTimeout(() => readClipboardFromFile(parsedFile), 200);
+        // Wait a bit so that the file is fully written
+        await setTimeoutAsync(200);
+
+        await readClipboardFromFile(parsedFile)
       }
     );
 
@@ -565,7 +559,7 @@ const cleanup = async () => {
   }
 
   if (clipboardFilesWatcher) {
-    clipboardFilesWatcher.unref();
+    await clipboardFilesWatcher.close();
     clipboardFilesWatcher = null;
   }
 
@@ -617,11 +611,6 @@ const setIconFor5Seconds = (icon: ClipboardIcon) => {
 
 const handleCheckBoxClick = (checkBox: Electron.MenuItem, key: string) => {
   config.set(key, checkBox.checked);
-  reload();
-};
-
-const handleCleanupCheckBox = (checkBox: Electron.MenuItem) => {
-  config.set("autoCleanup", checkBox.checked);
   reload();
 };
 
@@ -753,10 +742,17 @@ const setContextMenu = () => {
     },
     { type: "separator" },
     {
+      label: "Use polling",
+      type: "checkbox",
+      checked: config.get("usePolling", false),
+      click: (checkBox) => handleCheckBoxClick(checkBox, "usePolling"),
+      toolTip: `Try enabling this option if ${app.name} is not receiving clipboards, usually on network drives`,
+    },
+    {
       label: "Auto-clean",
       type: "checkbox",
       checked: config.get("autoCleanup", true),
-      click: handleCleanupCheckBox,
+      click: (checkBox) => handleCheckBoxClick(checkBox, "autoCleanup"),
       toolTip: `Auto-clean the files created by ${app.name}`,
     },
     {
