@@ -2,7 +2,6 @@ import chokidar from "chokidar";
 import type { ClipboardEventListener } from "clipboard-event";
 import {
   Menu,
-  MenuItem,
   Notification,
   Tray,
   app,
@@ -774,6 +773,7 @@ const setContextMenu = () => {
           openAtLogin: checkBox.checked,
         });
       },
+      visible: process.platform !== "linux",
     },
     { type: "separator" },
     { label: "Change folder", type: "normal", click: askForFolder },
