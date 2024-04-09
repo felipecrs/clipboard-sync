@@ -2,6 +2,7 @@
 
 const MakerDmg = require("@electron-forge/maker-dmg").default;
 const MakerSquirrel = require("@electron-forge/maker-squirrel").default;
+const MakerFlatpak = require("@electron-forge/maker-flatpak").default;
 const path = require("node:path");
 
 const getAppIcon = () => {
@@ -40,6 +41,14 @@ module.exports = {
     }),
     new MakerDmg({
       icon: getAppIcon(),
+    }),
+    new MakerFlatpak({
+      options: {
+        categories: ["Utility"],
+        icon: getAppIcon(),
+        files: [],
+        id: "io.github.felipecrs.ClipboardSync",
+      },
     }),
   ],
 };
