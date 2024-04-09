@@ -2,6 +2,7 @@ import chokidar from "chokidar";
 import type { ClipboardEventListener } from "clipboard-event";
 import {
   Menu,
+  MenuItem,
   Notification,
   Tray,
   app,
@@ -577,6 +578,9 @@ const reload = async () => {
   log.info("Reloading configuration...");
   await cleanup();
   await initialize();
+  if (process.platform === "linux") {
+    setContextMenu();
+  }
 };
 
 const getAppIcon = () => {
@@ -824,7 +828,9 @@ const createAppIcon = async () => {
 
   await initialize();
 
-  await autoCheckForUpdates();
+  if (process.platform !== "linux") {
+    await autoCheckForUpdates();
+  }
 };
 
 // This method will be called when Electron has finished
