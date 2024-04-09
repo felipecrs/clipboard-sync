@@ -150,7 +150,17 @@ export const cleanFiles = async (syncFolder: string) => {
     // from others older than 10 minutes
     const timeThreshold = parsedFile.from === "myself" ? now - 300000 : now - 600000;
 
-    const fileStat = await fs.lstat(filePath);
+    let fileStat;
+    try {
+      fileStat = await fs.lstat(filePath);
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        // Ignore ENOENT error (file not found), as our intention is to delete it anyway.
+        continue;
+      }
+      throw error;
+    }
+
     if (fileStat.ctime.getTime() <= timeThreshold) {
       log.info(`Deleting: ${filePath}`);
       await deleteFileOrFolderRecursively(filePath);

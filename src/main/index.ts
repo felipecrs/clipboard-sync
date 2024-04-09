@@ -509,7 +509,8 @@ const initialize = async () => {
           "**/*~*.TMP"
         ],
         awaitWriteFinish: {
-          stabilityThreshold: 500,
+          stabilityThreshold: 200,
+          pollInterval: 100
         }
       },
     ).on("add", async (filename) => {
@@ -518,8 +519,6 @@ const initialize = async () => {
           syncFolder,
           "from-others"
         );
-
-        log.info(`Event: ${filename}`);
 
         if (!parsedFile) {
           return;
