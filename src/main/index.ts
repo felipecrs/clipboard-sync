@@ -508,10 +508,6 @@ const initialize = async () => {
           // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt.json~RF1a1c3c.TMP"
           "**/*~*.TMP"
         ],
-        awaitWriteFinish: {
-          stabilityThreshold: 200,
-          pollInterval: 100
-        }
       },
     ).on("add", async (filename) => {
         const parsedFile = parseClipboardFileName(
@@ -523,6 +519,9 @@ const initialize = async () => {
         if (!parsedFile) {
           return;
         }
+
+        // Wait a bit so that the file is fully written
+        await setTimeoutAsync(200);
 
         await readClipboardFromFile(parsedFile)
       }
@@ -560,7 +559,7 @@ const cleanup = async () => {
   }
 
   if (clipboardFilesWatcher) {
-    clipboardFilesWatcher.close();
+    await clipboardFilesWatcher.close();
     clipboardFilesWatcher = null;
   }
 
