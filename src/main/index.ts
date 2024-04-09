@@ -717,6 +717,7 @@ const setContextMenu = () => {
           checked: config.get("sendFiles", true),
           click: (checkBox) => handleCheckBoxClick(checkBox, "sendFiles"),
           toolTip: "Whether to enable sending copied files or not",
+          visible: process.platform !== "linux",
         },
       ],
     },
@@ -745,6 +746,7 @@ const setContextMenu = () => {
           checked: config.get("receiveFiles", true),
           click: (checkBox) => handleCheckBoxClick(checkBox, "receiveFiles"),
           toolTip: "Whether to enable receiving files or not",
+          visible: process.platform !== "linux",
         },
       ],
     },
@@ -787,6 +789,7 @@ const setContextMenu = () => {
       label: updateLabel,
       type: "normal",
       click: checkForUpdatesPress,
+      visible: process.platform !== "linux",
     },
     {
       label: "GitHub",
