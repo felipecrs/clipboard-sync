@@ -21,7 +21,7 @@ const getAppIcon = () => {
 /** @type {import("@electron-forge/shared-types").ForgeConfig} */
 module.exports = {
   packagerConfig: {
-    icon: getAppIcon(process.platform),
+    icon: getAppIcon(),
     ignore: [
       /^\/(src)|(tools)|(.github)|(.vscode)/,
       /\/(.eslintrc.json)|(.gitignore)|(.gitattributes)|(electron.vite.config.ts)|(forge.config.cjs)|(tsconfig.json)|(bindl.config.js)|(bindl.config.js)|(README.md)$/,

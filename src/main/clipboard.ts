@@ -1,14 +1,24 @@
+import log from "electron-log";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import fswin from "fswin";
-import log from "electron-log";
 
 import { hostName, isReceivingFileNameSuffix } from "./global.js";
 import {
   deleteFileOrFolderRecursively,
   iterateThroughFilesRecursively,
 } from "./utils.js";
+
+import type {
+  Attributes as FSWinAttributes,
+  SetAttributes as FSWinSetAttributes,
+} from "fswin";
+
+let fswin: typeof import("fswin") | null = null;
+
+if (process.platform === "win32") {
+  fswin = require("fswin");
+}
 
 export type ClipboardType = "text" | "image" | "files";
 
@@ -148,7 +158,8 @@ export const cleanFiles = async (syncFolder: string) => {
 
     // Delete from myself files older than 5 minutes and
     // from others older than 10 minutes
-    const timeThreshold = parsedFile.from === "myself" ? now - 300000 : now - 600000;
+    const timeThreshold =
+      parsedFile.from === "myself" ? now - 300000 : now - 600000;
 
     let fileStat;
     try {
@@ -181,7 +192,7 @@ export const cleanFiles = async (syncFolder: string) => {
 export const unsyncFileOrFolderRecursively = async (fileOrFolder: string) => {
   function getAttributesWrapper(
     path: string,
-    callback: (arg0: Error, arg1: fswin.Attributes) => void
+    callback: (arg0: Error, arg1: FSWinAttributes) => void
   ) {
     fswin.getAttributes(path, function (result) {
       if (result) {
@@ -194,7 +205,7 @@ export const unsyncFileOrFolderRecursively = async (fileOrFolder: string) => {
 
   function setAttributesWrapper(
     path: string,
-    attributes: fswin.SetAttributes,
+    attributes: FSWinSetAttributes,
     callback: (arg0: Error, arg1: null) => void
   ) {
     fswin.setAttributes(path, attributes, function (succeeded) {

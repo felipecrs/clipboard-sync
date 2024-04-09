@@ -1,3 +1,4 @@
+import chokidar from "chokidar";
 import type { ClipboardEventListener } from "clipboard-event";
 import {
   Menu,
@@ -9,15 +10,13 @@ import {
   nativeImage,
   shell,
 } from "electron";
-import clipboardEx from "electron-clipboard-ex";
-import {setTimeout as setTimeoutAsync} from "timers/promises";
 import log from "electron-log";
 import Store from "electron-store";
 import cron from "node-cron";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { gt as semverGreaterThan } from "semver";
-import chokidar from "chokidar";
+import { setTimeout as setTimeoutAsync } from "timers/promises";
 
 import {
   ClipboardText,
@@ -60,6 +59,13 @@ log.eventLogger.startLogging();
 if (process.platform === "darwin") {
   // This is just during development, because LSUIElement=1 already handles this on the packaged application
   app.dock.hide();
+}
+
+// @ts-ignore - clipboard-event is an optional dependency
+let clipboardEx: typeof import("electron-clipboard-ex") | null = null;
+
+if (process.platform !== "linux") {
+  clipboardEx = require("electron-clipboard-ex");
 }
 
 type ConfigType = {
@@ -134,7 +140,7 @@ const writeClipboardToFile = async () => {
   try {
     // macOS writes text/plain even for uri-list and image/png, so we check
     // them before checking for text/plain
-    if (clipboardFormats.includes("text/uri-list")) {
+    if (clipboardFormats.includes("text/uri-list") && clipboardEx) {
       if (!config.get("sendFiles", true)) {
         return;
       }
@@ -324,7 +330,7 @@ const readClipboardFromFile = async (parsedFile: ParsedClipboardFileName) => {
   try {
     // macOS writes text/plain even for uri-list and image/png, so we check
     // them before checking for text/plain
-    if (clipboardFormats.includes("text/uri-list")) {
+    if (clipboardFormats.includes("text/uri-list") && clipboardEx) {
       currentFilePaths = clipboardEx.readFilePaths();
       currentClipboardType = "files";
     } else if (clipboardFormats.includes("image/png")) {
@@ -393,7 +399,7 @@ const readClipboardFromFile = async (parsedFile: ParsedClipboardFileName) => {
   } else if (fileClipboardType === "image") {
     clipboard.writeImage(nativeImage.createFromBuffer(newImage));
     lastImageSha256Read = newImageSha256;
-  } else if (fileClipboardType === "files") {
+  } else if (fileClipboardType === "files" && clipboardEx) {
     clipboardEx.writeFilePaths(newFilePaths);
     lastClipboardFilePathsRead = newFilePaths;
   }
@@ -495,9 +501,8 @@ const initialize = async () => {
     config.get("receiveFiles", true)
   ) {
     // Watches for files and reads clipboard from it
-    clipboardFilesWatcher = chokidar.watch(
-      syncFolder,
-      {
+    clipboardFilesWatcher = chokidar
+      .watch(syncFolder, {
         usePolling: config.get("usePolling", false),
         interval: 1000,
         binaryInterval: 1000,
@@ -506,10 +511,10 @@ const initialize = async () => {
         ignored: [
           // This filters out temporary files created by the OneDrive client, example:
           // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt.json~RF1a1c3c.TMP"
-          "**/*~*.TMP"
+          "**/*~*.TMP",
         ],
-      },
-    ).on("add", async (filename) => {
+      })
+      .on("add", async (filename) => {
         const parsedFile = parseClipboardFileName(
           filename,
           syncFolder,
@@ -523,9 +528,8 @@ const initialize = async () => {
         // Wait a bit so that the file is fully written
         await setTimeoutAsync(200);
 
-        await readClipboardFromFile(parsedFile)
-      }
-    );
+        await readClipboardFromFile(parsedFile);
+      });
 
     // Create a file to indicate that this computer is receiving clipboards
     await fs.writeFile(path.join(syncFolder, hostNameIsReceivingFileName), "");
@@ -573,6 +577,9 @@ const reload = async () => {
   log.info("Reloading configuration...");
   await cleanup();
   await initialize();
+  if (process.platform === "linux") {
+    setContextMenu();
+  }
 };
 
 const getAppIcon = () => {
@@ -709,6 +716,7 @@ const setContextMenu = () => {
           checked: config.get("sendFiles", true),
           click: (checkBox) => handleCheckBoxClick(checkBox, "sendFiles"),
           toolTip: "Whether to enable sending copied files or not",
+          visible: clipboardEx,
         },
       ],
     },
@@ -737,6 +745,7 @@ const setContextMenu = () => {
           checked: config.get("receiveFiles", true),
           click: (checkBox) => handleCheckBoxClick(checkBox, "receiveFiles"),
           toolTip: "Whether to enable receiving files or not",
+          visible: clipboardEx,
         },
       ],
     },
@@ -764,6 +773,7 @@ const setContextMenu = () => {
           openAtLogin: checkBox.checked,
         });
       },
+      visible: process.platform !== "linux",
     },
     { type: "separator" },
     { label: "Change folder", type: "normal", click: askForFolder },
