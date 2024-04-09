@@ -30,13 +30,13 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run format:check
-      - run: npm run package
+      - run: npm run make
   release:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: build
     strategy:
       matrix:
-        os: [macos, windows]
+        os: [macos, windows, ubuntu]
       fail-fast: false
     runs-on: "${{ matrix.os }}-latest"
     steps:
@@ -58,3 +58,4 @@ jobs:
           files: |
             out/make/**/*.exe
             out/make/**/*.dmg
+            out/make/**/*.flatpak
