@@ -15,7 +15,11 @@ import Store from "electron-store";
 import cron from "node-cron";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { gt as semverGreaterThan } from "semver";
+import os from "node:os";
+import {
+  gt as semverGreaterThan,
+  gte as semverGreaterThanOrEqual,
+} from "semver";
 import { setTimeout as setTimeoutAsync } from "timers/promises";
 
 import {
@@ -716,7 +720,7 @@ const setContextMenu = () => {
           checked: config.get("sendFiles", true),
           click: (checkBox) => handleCheckBoxClick(checkBox, "sendFiles"),
           toolTip: "Whether to enable sending copied files or not",
-          visible: clipboardEx,
+          visible: !!clipboardEx,
         },
       ],
     },
@@ -745,7 +749,7 @@ const setContextMenu = () => {
           checked: config.get("receiveFiles", true),
           click: (checkBox) => handleCheckBoxClick(checkBox, "receiveFiles"),
           toolTip: "Whether to enable receiving files or not",
-          visible: clipboardEx,
+          visible: !!clipboardEx,
         },
       ],
     },
@@ -810,12 +814,20 @@ const setContextMenu = () => {
 };
 
 const createAppIcon = async () => {
-  appIcon = new Tray(
-    getTrayIcon("clipboard")
-    // This GUID should not be changed. It ensures the tray icon position is kept between app updates.
-    // TODO: restore GUID, see:
-    // "72812af2-6bcc-40d9-b35d-0b43e72ac346"
-  );
+  // guid only works on Windows 11+
+  // https://github.com/electron/electron/issues/41773
+  if (
+    os.platform() === "win32" &&
+    semverGreaterThanOrEqual(os.release(), "10.0.22000")
+  ) {
+    appIcon = new Tray(
+      getTrayIcon("clipboard"),
+      // This GUID should not be changed. It ensures the tray icon position is kept between app updates.
+      "72812af2-6bcc-40d9-b35d-0b43e72ac346"
+    );
+  } else {
+    appIcon = new Tray(getTrayIcon("clipboard"));
+  }
   setContextMenu();
   appIcon.setToolTip(`${app.name} v${app.getVersion()}`);
 
