@@ -1,0 +1,39 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+  build:
+    needs: create
+    strategy:
+      matrix:
+        os: [macos, windows]
+      fail-fast: false
+    runs-on: "${{ matrix.os }}-latest"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: volta-cli/action@v4
+      # https://github.com/actions/runner/issues/2958
+      - if: matrix.os == 'macos'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - if: matrix.os == 'macos'
+        run: pip install setuptools
+      - run: npm ci
+      - run: npm run make
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: |
+            out/make/**/*.exe
+            out/make/**/*.dmg
