@@ -1,7 +1,7 @@
 {
   "name": "clipboard-sync",
   "productName": "Clipboard Sync",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "Sync your clipboard between computers using a shared folder",
   "type": "module",
   "main": "dist/main/index.js",
