@@ -1,0 +1,30 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  ci:
+    strategy:
+      matrix:
+        os: [macos, windows, ubuntu]
+      fail-fast: false
+    runs-on: "${{ matrix.os }}-latest"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: volta-cli/action@v4
+      # https://github.com/actions/runner/issues/2958
+      - if: matrix.os == 'macos'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - if: matrix.os == 'macos'
+        run: pip install setuptools
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run package
