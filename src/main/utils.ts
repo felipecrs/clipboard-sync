@@ -6,11 +6,11 @@ import { createHash } from "node:crypto";
 import followRedirects from "follow-redirects";
 import log from "electron-log";
 
-export const isArrayEquals = (arr1?: any[], arr2?: any[]) => {
+export const isArrayEquals = (arr1?: unknown[], arr2?: unknown[]) => {
   if (arr1 && arr2 && arr1.length == arr2.length) {
     arr1 = arr1.sort();
     arr2 = arr2.sort();
-    return arr1.every((u: any, i: number) => u === arr2[i]);
+    return arr1.every((u: unknown, i: number) => u === arr2[i]);
   }
   return false;
 };
@@ -118,7 +118,10 @@ export const calculateSha256 = (data: Buffer) => {
 
 export const getRedirectedUrl = async (requestOptions: RequestOptions) => {
   const result = await promisify(
-    (requestOptions: RequestOptions, callback: Function) => {
+    (
+      requestOptions: RequestOptions,
+      callback: (arg0: unknown, arg1: string) => void
+    ) => {
       const requestObj = followRedirects.https.request(
         requestOptions,
         (response) => {

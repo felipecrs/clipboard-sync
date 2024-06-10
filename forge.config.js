@@ -1,8 +1,9 @@
 // @ts-check
 
-const MakerDmg = require("@electron-forge/maker-dmg").default;
-const MakerSquirrel = require("@electron-forge/maker-squirrel").default;
-const path = require("node:path");
+import { MakerDMG } from "@electron-forge/maker-dmg";
+import { MakerSquirrel } from "@electron-forge/maker-squirrel";
+import path from "node:path";
+import process from "node:process";
 
 const getAppIcon = () => {
   const iconExtension =
@@ -13,13 +14,13 @@ const getAppIcon = () => {
       : "png";
 
   return path.resolve(
-    __dirname,
+    import.meta.dirname,
     `./resources/appicons/${iconExtension}/icon.${iconExtension}`
   );
 };
 
 /** @type {import("@electron-forge/shared-types").ForgeConfig} */
-module.exports = {
+const config = {
   packagerConfig: {
     icon: getAppIcon(),
     ignore: [
@@ -38,8 +39,10 @@ module.exports = {
       setupIcon: getAppIcon(),
       iconUrl: getAppIcon(),
     }),
-    new MakerDmg({
+    new MakerDMG({
       icon: getAppIcon(),
     }),
   ],
 };
+
+export default config;
