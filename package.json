@@ -12,8 +12,7 @@
     "dev": "electron-vite dev",
     "package": "electron-vite build && electron-forge package",
     "make": "electron-vite build && electron-forge make",
-    "clean-make": "npm run clean && npm ci && npm run make",
-    "lint": "echo \"No linting configured\""
+    "lint": "tsc --noEmit"
   },
   "keywords": [],
   "author": {
