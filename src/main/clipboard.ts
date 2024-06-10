@@ -90,7 +90,7 @@ export const parseClipboardFileName = (
   };
 };
 
-export const getNextFileNumber = async (syncFolder: string) => {
+export async function getNextFileNumber(syncFolder: string): Promise<number> {
   const numbers: number[] = [];
   const files = await fs.readdir(syncFolder);
   for (const file of files) {
@@ -104,12 +104,12 @@ export const getNextFileNumber = async (syncFolder: string) => {
     return Math.max(...numbers) + 1;
   }
   return 1;
-};
+}
 
-export const isThereMoreThanOneClipboardFile = async (
+export async function isThereMoreThanOneClipboardFile(
   syncFolder: string,
   filter: "none" | "from-others" | "from-myself" = "none"
-) => {
+): Promise<boolean> {
   const files = await fs.readdir(syncFolder);
   for (const file of files) {
     if (
@@ -119,16 +119,16 @@ export const isThereMoreThanOneClipboardFile = async (
     }
   }
   return false;
-};
+}
 
-export const isIsReceivingFile = (file: string) => {
+export function isIsReceivingFile(file: string): boolean {
   return file.endsWith(isReceivingFileNameSuffix);
-};
+}
 
 // Unsyncs from-others files older than 1 minute,
 // Removes from-myself files older than 5 minutes,
 // And removes from-others files older than 10 minutes.
-export const cleanFiles = async (syncFolder: string) => {
+export async function cleanFiles(syncFolder: string): Promise<void> {
   const now = Date.now();
 
   const files = await fs.readdir(syncFolder);
@@ -187,13 +187,15 @@ export const cleanFiles = async (syncFolder: string) => {
       await unsyncFileOrFolderRecursively(filePath);
     }
   }
-};
+}
 
-export const unsyncFileOrFolderRecursively = async (fileOrFolder: string) => {
+export async function unsyncFileOrFolderRecursively(
+  fileOrFolder: string
+): Promise<void> {
   function getAttributesWrapper(
     path: string,
     callback: (arg0: Error, arg1: FSWinAttributes) => void
-  ) {
+  ): void {
     fswin.getAttributes(path, function (result) {
       if (result) {
         callback(null, result);
@@ -207,7 +209,7 @@ export const unsyncFileOrFolderRecursively = async (fileOrFolder: string) => {
     path: string,
     attributes: FSWinSetAttributes,
     callback: (arg0: Error, arg1: null) => void
-  ) {
+  ): void {
     fswin.setAttributes(path, attributes, function (succeeded) {
       if (succeeded) {
         callback(null, null);
@@ -231,7 +233,7 @@ export const unsyncFileOrFolderRecursively = async (fileOrFolder: string) => {
       return;
     }
   });
-};
+}
 
 export type ClipboardText = {
   text?: string;
@@ -239,10 +241,10 @@ export type ClipboardText = {
   rtf?: string;
 };
 
-export const isClipboardTextEquals = (
+export function isClipboardTextEquals(
   text1: ClipboardText,
   text2: ClipboardText
-) => {
+): boolean {
   if (text1.text && text2.text) {
     return text1.text === text2.text;
   }
@@ -253,8 +255,8 @@ export const isClipboardTextEquals = (
     return text1.rtf === text2.rtf;
   }
   return false;
-};
+}
 
-export const isClipboardTextEmpty = (text: ClipboardText) => {
+export function isClipboardTextEmpty(text: ClipboardText): boolean {
   return !text.text && !text.html && !text.rtf;
-};
+}
