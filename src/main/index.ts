@@ -65,7 +65,8 @@ if (process.platform === "darwin") {
   app.dock.hide();
 }
 
-// @ts-ignore - clipboard-event is an optional dependency
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: clipboard-event is an optional dependency
 let clipboardEx: typeof import("electron-clipboard-ex") | null = null;
 
 if (process.platform !== "linux") {
@@ -414,7 +415,7 @@ const readClipboardFromFile = async (parsedFile: ParsedClipboardFileName) => {
 };
 
 const askForFolder = () => {
-  let previousFolder = config.get("folder");
+  const previousFolder = config.get("folder");
 
   const foldersSelected = dialog.showOpenDialogSync({
     title: "Select folder to save and read clipboard files",

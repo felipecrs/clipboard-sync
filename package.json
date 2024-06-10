@@ -12,7 +12,7 @@
     "dev": "electron-vite dev",
     "package": "electron-vite build && electron-forge package",
     "make": "electron-vite build && electron-forge make",
-    "lint": "tsc --noEmit"
+    "lint": "eslint ."
   },
   "keywords": [],
   "author": {
@@ -37,14 +37,18 @@
     "@electron-forge/maker-dmg": "^7.4.0",
     "@electron-forge/maker-squirrel": "^7.4.0",
     "@electron-toolkit/tsconfig": "^1.0.1",
+    "@eslint/js": "^9.4.0",
     "@types/electron-squirrel-startup": "^1.0.2",
+    "@types/eslint__js": "^8.42.3",
     "@types/follow-redirects": "^1.14.4",
     "@types/node-cron": "^3.0.11",
     "@types/semver": "^7.5.8",
     "electron": "^31.0.0",
     "electron-vite": "^2.2.0",
+    "eslint": "^8.57.0",
     "rimraf": "^5.0.7",
     "typescript": "^5.4.5",
+    "typescript-eslint": "^7.13.0",
     "vite": "^5.2.13"
   },
   "optionalDependencies": {
