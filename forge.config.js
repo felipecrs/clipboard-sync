@@ -10,12 +10,12 @@ const getAppIcon = () => {
     process.platform === "win32"
       ? "ico"
       : process.platform === "darwin"
-      ? "icns"
-      : "png";
+        ? "icns"
+        : "png";
 
   return path.resolve(
     import.meta.dirname,
-    `./resources/appicons/${iconExtension}/icon.${iconExtension}`
+    `./resources/appicons/${iconExtension}/icon.${iconExtension}`,
   );
 };
 

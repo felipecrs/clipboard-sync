@@ -5,6 +5,7 @@ const config = {
   extends: [
     "eslint:recommended",
     "@electron-toolkit/eslint-config-ts/recommended",
+    "eslint-config-prettier",
   ],
   ignorePatterns: ["dist/", "out/"],
 };
