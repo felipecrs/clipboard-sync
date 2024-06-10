@@ -119,7 +119,7 @@ let iconWaiter: NodeJS.Timeout = null;
 
 let lastTimeClipboardChecked: number = null;
 
-const writeClipboardToFile = async () => {
+async function writeClipboardToFile(): Promise<void> {
   const currentTime = Date.now();
 
   // Avoids sending the clipboard if there is no other computer receiving
@@ -269,9 +269,11 @@ const writeClipboardToFile = async () => {
   lastFileNumberWritten = fileNumber;
 
   setIconFor5Seconds("clipboard_sent");
-};
+}
 
-const readClipboardFromFile = async (parsedFile: ParsedClipboardFileName) => {
+async function readClipboardFromFile(
+  parsedFile: ParsedClipboardFileName
+): Promise<void> {
   const currentTime = Date.now();
 
   const file = parsedFile.file;
@@ -412,9 +414,9 @@ const readClipboardFromFile = async (parsedFile: ParsedClipboardFileName) => {
   lastTimeRead = currentTime;
 
   setIconFor5Seconds("clipboard_received");
-};
+}
 
-const askForFolder = () => {
+function askForFolder(): void {
   const previousFolder = config.get("folder");
 
   const foldersSelected = dialog.showOpenDialogSync({
@@ -444,9 +446,9 @@ const askForFolder = () => {
   if (folderSelected !== previousFolder) {
     reload();
   }
-};
+}
 
-const initialize = async () => {
+async function initialize(): Promise<void> {
   syncFolder = config.get("folder");
 
   if (!(typeof syncFolder === "string" || typeof syncFolder === "undefined")) {
@@ -552,9 +554,9 @@ const initialize = async () => {
       }
     );
   }
-};
+}
 
-const cleanup = async () => {
+async function cleanup(): Promise<void> {
   // Deletes the file that indicates that this computer is receiving clipboards
   if (syncFolder) {
     await fs.rm(path.join(syncFolder, hostNameIsReceivingFileName), {
@@ -576,18 +578,18 @@ const cleanup = async () => {
     filesCleanerTask.stop();
     filesCleanerTask = null;
   }
-};
+}
 
-const reload = async () => {
+async function reload(): Promise<void> {
   log.info("Reloading configuration...");
   await cleanup();
   await initialize();
   if (process.platform === "linux") {
     setContextMenu();
   }
-};
+}
 
-const getAppIcon = () => {
+function getAppIcon(): string {
   const iconExtension =
     process.platform === "win32"
       ? "ico"
@@ -599,18 +601,18 @@ const getAppIcon = () => {
     app.getAppPath(),
     `resources/appicons/${iconExtension}/icon.${iconExtension}`
   );
-};
+}
 
-const getTrayIcon = (icon: ClipboardIcon) => {
+function getTrayIcon(icon: ClipboardIcon): string {
   const iconExtension = process.platform === "win32" ? "ico" : "png";
 
   return path.resolve(
     app.getAppPath(),
     `resources/trayicons/${iconExtension}/${icon}.${iconExtension}`
   );
-};
+}
 
-const setIconFor5Seconds = (icon: ClipboardIcon) => {
+function setIconFor5Seconds(icon: ClipboardIcon): void {
   appIcon.setImage(getTrayIcon(icon));
 
   if (iconWaiter) {
@@ -619,16 +621,22 @@ const setIconFor5Seconds = (icon: ClipboardIcon) => {
   iconWaiter = setTimeout(() => {
     appIcon.setImage(getTrayIcon("clipboard"));
   }, 5000);
-};
+}
 
-const handleCheckBoxClick = (checkBox: Electron.MenuItem, key: string) => {
+function handleCheckBoxClick(checkBox: Electron.MenuItem, key: string): void {
   config.set(key, checkBox.checked);
   reload();
-};
+}
 
 let updateLabel = "Check for updates";
 
-const isUpdateAvailable = async () => {
+async function isUpdateAvailable(): Promise<
+  | false
+  | {
+      newVersion: string;
+      newVersionUrl: string;
+    }
+> {
   let newVersionUrl;
   try {
     newVersionUrl = await getRedirectedUrl({
@@ -653,9 +661,9 @@ const isUpdateAvailable = async () => {
   }
 
   return false;
-};
+}
 
-const checkForUpdatesPress = async () => {
+async function checkForUpdatesPress(): Promise<void> {
   const update = await isUpdateAvailable();
   if (update) {
     new Notification({
@@ -681,9 +689,9 @@ const checkForUpdatesPress = async () => {
       icon: getAppIcon(),
     }).show();
   }
-};
+}
 
-const autoCheckForUpdates = async () => {
+async function autoCheckForUpdates(): Promise<void> {
   const update = await isUpdateAvailable();
   if (update) {
     new Notification({
@@ -692,9 +700,9 @@ const autoCheckForUpdates = async () => {
       icon: getAppIcon(),
     }).show();
   }
-};
+}
 
-const setContextMenu = () => {
+function setContextMenu(): void {
   const menu = Menu.buildFromTemplate([
     {
       label: "Send",
@@ -705,21 +713,22 @@ const setContextMenu = () => {
           label: "Texts",
           type: "checkbox",
           checked: config.get("sendTexts", true),
-          click: (checkBox) => handleCheckBoxClick(checkBox, "sendTexts"),
+          click: (checkBox): void => handleCheckBoxClick(checkBox, "sendTexts"),
           toolTip: "Whether to enable sending copied texts or not",
         },
         {
           label: "Images",
           type: "checkbox",
           checked: config.get("sendImages", true),
-          click: (checkBox) => handleCheckBoxClick(checkBox, "sendImages"),
+          click: (checkBox): void =>
+            handleCheckBoxClick(checkBox, "sendImages"),
           toolTip: "Whether to enable sending copied images or not",
         },
         {
           label: "Files",
           type: "checkbox",
           checked: config.get("sendFiles", true),
-          click: (checkBox) => handleCheckBoxClick(checkBox, "sendFiles"),
+          click: (checkBox): void => handleCheckBoxClick(checkBox, "sendFiles"),
           toolTip: "Whether to enable sending copied files or not",
           visible: !!clipboardEx,
         },
@@ -734,21 +743,24 @@ const setContextMenu = () => {
           label: "Texts",
           type: "checkbox",
           checked: config.get("receiveTexts", true),
-          click: (checkBox) => handleCheckBoxClick(checkBox, "receiveTexts"),
+          click: (checkBox): void =>
+            handleCheckBoxClick(checkBox, "receiveTexts"),
           toolTip: "Whether to enable receiving texts or not",
         },
         {
           label: "Images",
           type: "checkbox",
           checked: config.get("receiveImages", true),
-          click: (checkBox) => handleCheckBoxClick(checkBox, "receiveImages"),
+          click: (checkBox): void =>
+            handleCheckBoxClick(checkBox, "receiveImages"),
           toolTip: "Whether to enable receiving images or not",
         },
         {
           label: "Files",
           type: "checkbox",
           checked: config.get("receiveFiles", true),
-          click: (checkBox) => handleCheckBoxClick(checkBox, "receiveFiles"),
+          click: (checkBox): void =>
+            handleCheckBoxClick(checkBox, "receiveFiles"),
           toolTip: "Whether to enable receiving files or not",
           visible: !!clipboardEx,
         },
@@ -759,21 +771,21 @@ const setContextMenu = () => {
       label: "Use polling",
       type: "checkbox",
       checked: config.get("usePolling", false),
-      click: (checkBox) => handleCheckBoxClick(checkBox, "usePolling"),
+      click: (checkBox): void => handleCheckBoxClick(checkBox, "usePolling"),
       toolTip: `Try enabling this option if ${app.name} is not receiving clipboards, usually on network drives`,
     },
     {
       label: "Auto-clean",
       type: "checkbox",
       checked: config.get("autoCleanup", true),
-      click: (checkBox) => handleCheckBoxClick(checkBox, "autoCleanup"),
+      click: (checkBox): void => handleCheckBoxClick(checkBox, "autoCleanup"),
       toolTip: `Auto-clean the files created by ${app.name}`,
     },
     {
       label: "Auto-start on login",
       type: "checkbox",
       checked: app.getLoginItemSettings().openAtLogin,
-      click: (checkBox: Electron.MenuItem) => {
+      click: (checkBox: Electron.MenuItem): void => {
         app.setLoginItemSettings({
           openAtLogin: checkBox.checked,
         });
@@ -785,7 +797,7 @@ const setContextMenu = () => {
     {
       label: "Open folder",
       type: "normal",
-      click: () => {
+      click: (): void => {
         shell.openPath(syncFolder);
       },
     },
@@ -798,7 +810,7 @@ const setContextMenu = () => {
     {
       label: "GitHub",
       type: "normal",
-      click: () => {
+      click: (): void => {
         shell.openExternal("https://github.com/felipecrs/clipboard-sync");
       },
       toolTip:
@@ -808,13 +820,13 @@ const setContextMenu = () => {
     {
       label: "Exit",
       type: "normal",
-      click: () => quit(),
+      click: (): void => quit(),
     },
   ]);
   appIcon.setContextMenu(menu);
-};
+}
 
-const createAppIcon = async () => {
+async function createAppIcon(): Promise<void> {
   // guid only works on Windows 11+
   // https://github.com/electron/electron/issues/41773
   if (
@@ -844,7 +856,7 @@ const createAppIcon = async () => {
   await initialize();
 
   await autoCheckForUpdates();
-};
+}
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -852,21 +864,21 @@ const createAppIcon = async () => {
 app.on("ready", createAppIcon);
 
 let cleanupBeforeQuitDone = false;
-const cleanupBeforeQuit = async () => {
+async function cleanupBeforeQuit(): Promise<void> {
   if (cleanupBeforeQuitDone) {
     return;
   }
   await cleanup();
   cleanupBeforeQuitDone = true;
-};
+}
 
-const quit = (exitCode: number = 0) => {
+function quit(exitCode: number = 0): void {
   if (exitCode === 0) {
     app.quit();
   } else {
     cleanupBeforeQuit();
     app.exit(exitCode);
   }
-};
+}
 
 app.on("before-quit", cleanupBeforeQuit);

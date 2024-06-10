@@ -6,19 +6,19 @@ import { createHash } from "node:crypto";
 import followRedirects from "follow-redirects";
 import log from "electron-log";
 
-export const isArrayEquals = (arr1?: unknown[], arr2?: unknown[]) => {
+export function isArrayEquals(arr1?: unknown[], arr2?: unknown[]): boolean {
   if (arr1 && arr2 && arr1.length == arr2.length) {
     arr1 = arr1.sort();
     arr2 = arr2.sort();
     return arr1.every((u: unknown, i: number) => u === arr2[i]);
   }
   return false;
-};
+}
 
-export const iterateThroughFilesRecursively = async (
+export async function iterateThroughFilesRecursively(
   paths: string[],
   fn: (arg0: string) => unknown
-): Promise<unknown[]> => {
+): Promise<unknown[]> {
   const results: unknown[] = [];
   for (const fileOrFolder of paths) {
     try {
@@ -47,7 +47,7 @@ export const iterateThroughFilesRecursively = async (
     }
   }
   return results;
-};
+}
 
 export const getTotalNumberOfFiles = async (
   paths: string[]
@@ -74,7 +74,9 @@ export const getFilesSizeInMb = async (paths: string[]): Promise<number> => {
 };
 
 // https://stackoverflow.com/a/32197381/12156188
-export const deleteFileOrFolderRecursively = async (fileOrFolder: string) => {
+export async function deleteFileOrFolderRecursively(
+  fileOrFolder: string
+): Promise<void> {
   try {
     if ((await fs.lstat(fileOrFolder)).isDirectory()) {
       const files = await fs.readdir(fileOrFolder);
@@ -91,12 +93,12 @@ export const deleteFileOrFolderRecursively = async (fileOrFolder: string) => {
   } catch (err) {
     log.error(`Error deleting ${fileOrFolder}:\n${err}`);
   }
-};
+}
 
-export const copyFolderRecursive = async (
+export async function copyFolderRecursive(
   source: string,
   destination: string
-) => {
+): Promise<void> {
   await fs.mkdir(destination, { recursive: true });
   const files = await fs.readdir(source);
   for (const file of files) {
@@ -110,13 +112,15 @@ export const copyFolderRecursive = async (
       await fs.copyFile(curPath, fullDestination);
     }
   }
-};
+}
 
-export const calculateSha256 = (data: Buffer) => {
+export function calculateSha256(data: Buffer): string {
   return createHash("sha256").update(data).digest("hex");
-};
+}
 
-export const getRedirectedUrl = async (requestOptions: RequestOptions) => {
+export async function getRedirectedUrl(
+  requestOptions: RequestOptions
+): Promise<string> {
   const result = await promisify(
     (
       requestOptions: RequestOptions,
@@ -135,4 +139,4 @@ export const getRedirectedUrl = async (requestOptions: RequestOptions) => {
     return result;
   }
   throw new Error("Failed to get redirected URL");
-};
+}
