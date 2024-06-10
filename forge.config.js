@@ -3,7 +3,6 @@
 import { MakerDMG } from "@electron-forge/maker-dmg";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import path from "node:path";
-import process from "node:process";
 
 const getAppIcon = () => {
   const iconExtension =
