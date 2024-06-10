@@ -17,7 +17,7 @@ export function isArrayEquals(arr1?: unknown[], arr2?: unknown[]): boolean {
 
 export async function iterateThroughFilesRecursively(
   paths: string[],
-  fn: (arg0: string) => unknown
+  fn: (arg0: string) => unknown,
 ): Promise<unknown[]> {
   const results: unknown[] = [];
   for (const fileOrFolder of paths) {
@@ -28,7 +28,7 @@ export async function iterateThroughFilesRecursively(
           const filePath = path.join(fileOrFolder, file);
           const subResults = await iterateThroughFilesRecursively(
             [filePath],
-            fn
+            fn,
           );
           for (const result of subResults) {
             if (result) {
@@ -50,7 +50,7 @@ export async function iterateThroughFilesRecursively(
 }
 
 export const getTotalNumberOfFiles = async (
-  paths: string[]
+  paths: string[],
 ): Promise<number> => {
   let totalNumberOfFiles = 0;
   await iterateThroughFilesRecursively(paths, () => {
@@ -75,7 +75,7 @@ export const getFilesSizeInMb = async (paths: string[]): Promise<number> => {
 
 // https://stackoverflow.com/a/32197381/12156188
 export async function deleteFileOrFolderRecursively(
-  fileOrFolder: string
+  fileOrFolder: string,
 ): Promise<void> {
   try {
     if ((await fs.lstat(fileOrFolder)).isDirectory()) {
@@ -97,7 +97,7 @@ export async function deleteFileOrFolderRecursively(
 
 export async function copyFolderRecursive(
   source: string,
-  destination: string
+  destination: string,
 ): Promise<void> {
   await fs.mkdir(destination, { recursive: true });
   const files = await fs.readdir(source);
@@ -119,21 +119,21 @@ export function calculateSha256(data: Buffer): string {
 }
 
 export async function getRedirectedUrl(
-  requestOptions: RequestOptions
+  requestOptions: RequestOptions,
 ): Promise<string> {
   const result = await promisify(
     (
       requestOptions: RequestOptions,
-      callback: (arg0: unknown, arg1: string) => void
+      callback: (arg0: unknown, arg1: string) => void,
     ) => {
       const requestObj = followRedirects.https.request(
         requestOptions,
         (response) => {
           callback(null, response.responseUrl);
-        }
+        },
       );
       requestObj.end();
-    }
+    },
   )(requestOptions);
   if (typeof result === "string") {
     return result;

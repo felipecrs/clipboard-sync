@@ -12,7 +12,9 @@
     "dev": "electron-vite dev",
     "package": "electron-vite build && electron-forge package",
     "make": "electron-vite build && electron-forge make",
-    "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts"
+    "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "keywords": [],
   "author": {
@@ -45,6 +47,8 @@
     "electron": "^31.0.0",
     "electron-vite": "^2.2.0",
     "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.3.1",
     "rimraf": "^5.0.7",
     "typescript": "^5.4.5",
     "vite": "^5.2.13"

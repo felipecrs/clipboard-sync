@@ -8,6 +8,6 @@ const platform = process.platform === "darwin" ? "mac" : process.platform;
 if (platform === "mac" || platform === "linux") {
   chmodSync(
     `./node_modules/clipboard-event/platform/clipboard-event-handler-${platform}`,
-    0o755
+    0o755,
   );
 }

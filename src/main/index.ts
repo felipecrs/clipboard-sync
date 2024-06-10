@@ -125,11 +125,11 @@ async function writeClipboardToFile(): Promise<void> {
   // Avoids sending the clipboard if there is no other computer receiving
   if (
     (await fs.readdir(syncFolder)).filter(
-      (file) => isIsReceivingFile(file) && file !== hostNameIsReceivingFileName
+      (file) => isIsReceivingFile(file) && file !== hostNameIsReceivingFileName,
     ).length === 0
   ) {
     log.info(
-      "No other computer is receiving clipboards. Skipping clipboard send..."
+      "No other computer is receiving clipboards. Skipping clipboard send...",
     );
     return;
   }
@@ -231,14 +231,14 @@ async function writeClipboardToFile(): Promise<void> {
   if (clipboardType === "text") {
     destinationPath = path.join(
       syncFolder,
-      `${fileNumber}-${hostName}.text.json`
+      `${fileNumber}-${hostName}.text.json`,
     );
     await fs.writeFile(
       destinationPath,
       JSON.stringify(clipboardText, null, 2),
       {
         encoding: "utf8",
-      }
+      },
     );
     lastTextWritten = clipboardText;
   } else if (clipboardType === "image") {
@@ -249,13 +249,13 @@ async function writeClipboardToFile(): Promise<void> {
     filesCount = await getTotalNumberOfFiles(clipboardFilePaths);
     destinationPath = path.join(
       syncFolder,
-      `${fileNumber}-${hostName}.${filesCount}_files`
+      `${fileNumber}-${hostName}.${filesCount}_files`,
     );
     await fs.mkdir(destinationPath);
     for (const filePath of clipboardFilePaths) {
       const fullDestination = path.join(
         destinationPath,
-        path.basename(filePath)
+        path.basename(filePath),
       );
       if ((await fs.stat(filePath)).isDirectory()) {
         await copyFolderRecursive(filePath, fullDestination);
@@ -272,7 +272,7 @@ async function writeClipboardToFile(): Promise<void> {
 }
 
 async function readClipboardFromFile(
-  parsedFile: ParsedClipboardFileName
+  parsedFile: ParsedClipboardFileName,
 ): Promise<void> {
   const currentTime = Date.now();
 
@@ -293,7 +293,7 @@ async function readClipboardFromFile(
       newText = JSON.parse(
         await fs.readFile(file, {
           encoding: "utf8",
-        })
+        }),
       );
     } else if (fileClipboardType === "image") {
       if (!config.get("receiveImages", true)) {
@@ -314,12 +314,12 @@ async function readClipboardFromFile(
       const filesCountInFolder = await getTotalNumberOfFiles([file]);
       if (newFilesCount !== filesCountInFolder) {
         log.info(
-          `Not all files are yet present in _files folder. Current: ${filesCountInFolder}, expected: ${newFilesCount}. Skipping...`
+          `Not all files are yet present in _files folder. Current: ${filesCountInFolder}, expected: ${newFilesCount}. Skipping...`,
         );
         return;
       }
       newFilePaths = (await fs.readdir(file)).map((fileName: string) =>
-        path.join(file, fileName)
+        path.join(file, fileName),
       );
     }
   } catch (error) {
@@ -395,7 +395,7 @@ async function readClipboardFromFile(
     currentFileNumber < lastFileNumberWritten
   ) {
     log.info(
-      `Skipping reading clipboard from ${file} as a newer clipboard was already sent`
+      `Skipping reading clipboard from ${file} as a newer clipboard was already sent`,
     );
     return;
   }
@@ -433,7 +433,7 @@ function askForFolder(): void {
   if (!folderSelected && !previousFolder) {
     dialog.showErrorBox(
       "Folder was not selected",
-      "Please start the application again to select a folder."
+      "Please start the application again to select a folder.",
     );
     quit(1);
     return;
@@ -525,7 +525,7 @@ async function initialize(): Promise<void> {
         const parsedFile = parseClipboardFileName(
           filename,
           syncFolder,
-          "from-others"
+          "from-others",
         );
 
         if (!parsedFile) {
@@ -551,7 +551,7 @@ async function initialize(): Promise<void> {
       {
         scheduled: true,
         runOnInit: true,
-      }
+      },
     );
   }
 }
@@ -594,12 +594,12 @@ function getAppIcon(): string {
     process.platform === "win32"
       ? "ico"
       : process.platform === "darwin"
-      ? "icns"
-      : "png";
+        ? "icns"
+        : "png";
 
   return path.resolve(
     app.getAppPath(),
-    `resources/appicons/${iconExtension}/icon.${iconExtension}`
+    `resources/appicons/${iconExtension}/icon.${iconExtension}`,
   );
 }
 
@@ -608,7 +608,7 @@ function getTrayIcon(icon: ClipboardIcon): string {
 
   return path.resolve(
     app.getAppPath(),
-    `resources/trayicons/${iconExtension}/${icon}.${iconExtension}`
+    `resources/trayicons/${iconExtension}/${icon}.${iconExtension}`,
   );
 }
 
@@ -674,11 +674,11 @@ async function checkForUpdatesPress(): Promise<void> {
     const baseUrl = "https://github.com/felipecrs/clipboard-sync/releases";
     if (process.platform === "win32") {
       shell.openExternal(
-        `${baseUrl}/download/v${update.newVersion}/Clipboard.Sync-${update.newVersion}.Setup.exe`
+        `${baseUrl}/download/v${update.newVersion}/Clipboard.Sync-${update.newVersion}.Setup.exe`,
       );
     } else if (process.platform === "darwin") {
       shell.openExternal(
-        `${baseUrl}/download/v${update.newVersion}/Clipboard.Sync-${update.newVersion}-x64.dmg`
+        `${baseUrl}/download/v${update.newVersion}/Clipboard.Sync-${update.newVersion}-x64.dmg`,
       );
     }
     shell.openExternal(baseUrl);
@@ -836,7 +836,7 @@ async function createAppIcon(): Promise<void> {
     appIcon = new Tray(
       getTrayIcon("clipboard"),
       // This GUID should not be changed. It ensures the tray icon position is kept between app updates.
-      "72812af2-6bcc-40d9-b35d-0b43e72ac346"
+      "72812af2-6bcc-40d9-b35d-0b43e72ac346",
     );
   } else {
     appIcon = new Tray(getTrayIcon("clipboard"));

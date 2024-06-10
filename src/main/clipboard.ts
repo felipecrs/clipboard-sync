@@ -35,7 +35,7 @@ export type ParsedClipboardFileName = {
 export const parseClipboardFileName = (
   file: string,
   syncFolder: string,
-  filter: "none" | "from-others" | "from-myself" = "none"
+  filter: "none" | "from-others" | "from-myself" = "none",
 ): ParsedClipboardFileName | null => {
   let number = 0;
   let clipboardType: ClipboardType;
@@ -49,7 +49,7 @@ export const parseClipboardFileName = (
   const baseFile = relativePath.split(path.sep)[0];
 
   const match = baseFile.match(
-    /^([1-9][0-9]*)-([0-9a-zA-Z-]+)\.((text\.json)|png|([1-9][0-9]*)_files)$/
+    /^([1-9][0-9]*)-([0-9a-zA-Z-]+)\.((text\.json)|png|([1-9][0-9]*)_files)$/,
   );
 
   if (match) {
@@ -108,7 +108,7 @@ export async function getNextFileNumber(syncFolder: string): Promise<number> {
 
 export async function isThereMoreThanOneClipboardFile(
   syncFolder: string,
-  filter: "none" | "from-others" | "from-myself" = "none"
+  filter: "none" | "from-others" | "from-myself" = "none",
 ): Promise<boolean> {
   const files = await fs.readdir(syncFolder);
   for (const file of files) {
@@ -147,7 +147,7 @@ export async function cleanFiles(syncFolder: string): Promise<void> {
       const match = path
         .parse(filePath)
         .base.match(
-          /^((0|[1-9][0-9]*)-[0-9a-zA-Z-]+\.txt)|(receiving-[0-9a-zA-Z-]+\.txt)|([0-9a-zA-Z-]+\.is-reading\.txt)$/
+          /^((0|[1-9][0-9]*)-[0-9a-zA-Z-]+\.txt)|(receiving-[0-9a-zA-Z-]+\.txt)|([0-9a-zA-Z-]+\.is-reading\.txt)$/,
         );
       if (match) {
         log.info(`Deleting file used by previous versions: ${filePath}`);
@@ -190,11 +190,11 @@ export async function cleanFiles(syncFolder: string): Promise<void> {
 }
 
 export async function unsyncFileOrFolderRecursively(
-  fileOrFolder: string
+  fileOrFolder: string,
 ): Promise<void> {
   function getAttributesWrapper(
     path: string,
-    callback: (arg0: Error, arg1: FSWinAttributes) => void
+    callback: (arg0: Error, arg1: FSWinAttributes) => void,
   ): void {
     fswin.getAttributes(path, function (result) {
       if (result) {
@@ -208,7 +208,7 @@ export async function unsyncFileOrFolderRecursively(
   function setAttributesWrapper(
     path: string,
     attributes: FSWinSetAttributes,
-    callback: (arg0: Error, arg1: null) => void
+    callback: (arg0: Error, arg1: null) => void,
   ): void {
     fswin.setAttributes(path, attributes, function (succeeded) {
       if (succeeded) {
@@ -243,7 +243,7 @@ export type ClipboardText = {
 
 export function isClipboardTextEquals(
   text1: ClipboardText,
-  text2: ClipboardText
+  text2: ClipboardText,
 ): boolean {
   if (text1.text && text2.text) {
     return text1.text === text2.text;
