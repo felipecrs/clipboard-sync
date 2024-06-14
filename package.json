@@ -28,7 +28,7 @@
     "clipboard-event": "^1.6.0",
     "electron-log": "^5.1.5",
     "electron-squirrel-startup": "^1.0.1",
-    "electron-store": "^9.0.0",
+    "electron-store": "^10.0.0",
     "follow-redirects": "^1.15.6",
     "fswin": "^3.24.524",
     "node-cron": "^3.0.3",
