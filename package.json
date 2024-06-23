@@ -45,7 +45,7 @@
     "@types/node-cron": "^3.0.11",
     "@types/semver": "^7.5.8",
     "electron": "^31.0.2",
-    "electron-vite": "^2.2.0",
+    "electron-vite": "^2.3.0",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "prettier": "^3.3.2",
