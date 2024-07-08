@@ -12,10 +12,11 @@ import {
 } from "electron";
 import log from "electron-log";
 import Store from "electron-store";
+import { execa } from "execa";
 import cron from "node-cron";
 import fs from "node:fs/promises";
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
 import {
   gt as semverGreaterThan,
   gte as semverGreaterThanOrEqual,
@@ -702,6 +703,25 @@ async function autoCheckForUpdates(): Promise<void> {
   }
 }
 
+async function restartOneDrive(): Promise<void> {
+  const scriptPath = path.resolve(
+    app.getAppPath(),
+    "resources/scripts/Restart-OneDrive.ps1",
+  );
+  const result = await execa(
+    "PowerShell.exe",
+    ["-File", scriptPath, "-NoProfile", "-ExecutionPolicy", "Bypass"],
+    {
+      reject: false,
+    },
+  );
+
+  if (result.failed) {
+    log.error(`Error restarting OneDrive: ${result}`);
+    dialog.showErrorBox("Error restarting OneDrive", result.toString());
+  }
+}
+
 function setContextMenu(): void {
   const menu = Menu.buildFromTemplate([
     {
@@ -800,6 +820,13 @@ function setContextMenu(): void {
       click: (): void => {
         shell.openPath(syncFolder);
       },
+    },
+    { type: "separator", visible: process.platform === "win32" },
+    {
+      label: "Restart OneDrive",
+      type: "normal",
+      visible: process.platform === "win32",
+      click: restartOneDrive,
     },
     { type: "separator" },
     {
