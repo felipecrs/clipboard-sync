@@ -31,7 +31,7 @@ else {
     }
 
     if (-not $path) {
-        Write-Host "OneDrive executable not found"
+        Write-Error "OneDrive executable not found"
         exit 1
     }
 }
