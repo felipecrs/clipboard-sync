@@ -710,14 +710,17 @@ async function restartOneDrive(): Promise<void> {
   );
   const result = await execa(
     "PowerShell.exe",
-    ["-File", scriptPath, "-NoProfile", "-ExecutionPolicy", "Bypass"],
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath],
     {
       reject: false,
+      all: true,
     },
   );
 
+  log.info(result.all);
+
   if (result.failed) {
-    log.error(`Error restarting OneDrive: ${result}`);
+    log.error(`Error restarting OneDrive: ${result.shortMessage}`);
     dialog.showErrorBox("Error restarting OneDrive", result.toString());
   }
 }
