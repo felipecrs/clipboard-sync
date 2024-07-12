@@ -3,7 +3,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { hostName, isReceivingFileNameSuffix } from "./global.js";
+import {
+  hostName,
+  hostNameIsReceivingFileName,
+  isReceivingFileNameSuffix,
+} from "./global.js";
 import {
   deleteFileOrFolderRecursively,
   iterateThroughFilesRecursively,
@@ -123,6 +127,27 @@ export async function isThereMoreThanOneClipboardFile(
 
 export function isIsReceivingFile(file: string): boolean {
   return file.endsWith(isReceivingFileNameSuffix);
+}
+
+export async function noComputersReceiving(
+  syncFolder: string,
+  currentTime: number,
+): Promise<boolean> {
+  const computersReceiving = (await fs.readdir(syncFolder)).filter(
+    (file) => isIsReceivingFile(file) && file !== hostNameIsReceivingFileName,
+  );
+
+  // This file will be renewed on every 4 minutes, this will conside stale
+  // any files older than 10 minutes
+  const tenMinutesAgo = new Date(currentTime - 600000);
+  for (const computerReceiving of computersReceiving) {
+    const fileStat = await fs.stat(path.join(syncFolder, computerReceiving));
+    if (fileStat.mtime >= tenMinutesAgo) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 // Unsyncs from-others files older than 1 minute,
