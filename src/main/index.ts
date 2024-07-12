@@ -570,8 +570,7 @@ async function initialize(handleTasks = true): Promise<void> {
         }
 
         // Consider the system idle if it has been inactive for 15 minutes
-        // TODO: revert to 15 minutes after testing
-        const idleState = powerMonitor.getSystemIdleState(10);
+        const idleState = powerMonitor.getSystemIdleState(900);
 
         if (idleState === "unknown") {
           log.warn("System idle state is unknown");
@@ -633,8 +632,7 @@ async function unInitialize(handleTasks = true): Promise<void> {
     }
   }
 
-  // TODO: change to suspend
-  appIcon.setImage(getTrayIcon("received"));
+  appIcon.setImage(getTrayIcon("suspended"));
 
   initialized = false;
   initializingOrUnInitializing = false;
