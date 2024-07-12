@@ -729,6 +729,11 @@ async function isUpdateAvailable(): Promise<
   const newVersion = newVersionUrl.split("/").pop().replace(/^v/, "");
   const currentVersion = app.getVersion();
 
+  // Development version should not attempt to update
+  if (currentVersion === "0.0.0-development") {
+    return false;
+  }
+
   if (semverGreaterThan(newVersion, currentVersion)) {
     updateLabel = "Download update";
     setContextMenu();

@@ -50,6 +50,7 @@ jobs:
       - if: matrix.os == 'macos'
         run: pip install setuptools
       - run: npm ci
+      - run: npm version --no-git-tag-version "${{ github.ref_name }}"
       - run: npm run make
       - uses: softprops/action-gh-release@v2
         with:
