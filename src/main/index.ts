@@ -8,6 +8,7 @@ import {
   clipboard,
   dialog,
   nativeImage,
+  powerMonitor,
   shell,
 } from "electron";
 import log from "electron-log";
@@ -85,7 +86,7 @@ type ConfigType = {
   autoCleanup: boolean;
 };
 
-type ClipboardIcon = "clipboard" | "clipboard_sent" | "clipboard_received";
+type ClipboardIcon = "working" | "sent" | "received" | "suspended";
 
 const config = new Store<ConfigType>({
   defaults: {
@@ -113,9 +114,12 @@ let lastImageSha256Written: string = null;
 let lastTimeWritten: number = null;
 let lastFileNumberWritten: number = null;
 
+let initialized: boolean = false;
+let initializingOrUnInitializing: boolean = false;
 let clipboardListener: ClipboardEventListener = null;
 let clipboardFilesWatcher: chokidar.FSWatcher = null;
 let filesCleanerTask: cron.ScheduledTask = null;
+let idleDetectorTask: cron.ScheduledTask = null;
 let iconWaiter: NodeJS.Timeout = null;
 
 let lastTimeClipboardChecked: number = null;
@@ -269,7 +273,7 @@ async function writeClipboardToFile(): Promise<void> {
   lastTimeWritten = currentTime;
   lastFileNumberWritten = fileNumber;
 
-  setIconFor5Seconds("clipboard_sent");
+  setIconFor5Seconds("sent");
 }
 
 async function readClipboardFromFile(
@@ -414,7 +418,7 @@ async function readClipboardFromFile(
   log.info(`Clipboard was read from ${file}`);
   lastTimeRead = currentTime;
 
-  setIconFor5Seconds("clipboard_received");
+  setIconFor5Seconds("received");
 }
 
 function askForFolder(): void {
@@ -449,7 +453,9 @@ function askForFolder(): void {
   }
 }
 
-async function initialize(): Promise<void> {
+async function initialize(handleTasks = true): Promise<void> {
+  initializingOrUnInitializing = true;
+
   syncFolder = config.get("folder");
 
   if (!(typeof syncFolder === "string" || typeof syncFolder === "undefined")) {
@@ -543,21 +549,60 @@ async function initialize(): Promise<void> {
     await fs.writeFile(path.join(syncFolder, hostNameIsReceivingFileName), "");
   }
 
-  if (config.get("autoCleanup", true)) {
-    filesCleanerTask = cron.schedule(
-      "*/1 * * * *",
-      () => {
-        cleanFiles(syncFolder);
-      },
-      {
-        scheduled: true,
-        runOnInit: true,
+  if (handleTasks) {
+    if (config.get("autoCleanup", true)) {
+      filesCleanerTask = cron.schedule(
+        "*/1 * * * *",
+        () => {
+          cleanFiles(syncFolder);
+        },
+        {
+          runOnInit: true,
+        },
+      );
+    }
+
+    idleDetectorTask = cron.schedule(
+      "* * * * * *", // every second
+      async () => {
+        if (initializingOrUnInitializing) {
+          return;
+        }
+
+        // Consider the system idle if it has been inactive for 15 minutes
+        const idleState = powerMonitor.getSystemIdleState(900);
+
+        if (idleState === "unknown") {
+          log.warn("System idle state is unknown");
+          return;
+        }
+
+        if (idleState === "active") {
+          if (initialized) {
+            return;
+          }
+          log.info("System is active. Resuming...");
+          await initialize(false);
+          return;
+        }
+
+        if (initialized) {
+          log.info("System is idle. Suspending...");
+          await unInitialize(false);
+        }
       },
     );
   }
+
+  appIcon.setImage(getTrayIcon("working"));
+
+  initialized = true;
+  initializingOrUnInitializing = false;
 }
 
-async function cleanup(): Promise<void> {
+async function unInitialize(handleTasks = true): Promise<void> {
+  initializingOrUnInitializing = true;
+
   // Deletes the file that indicates that this computer is receiving clipboards
   if (syncFolder) {
     await fs.rm(path.join(syncFolder, hostNameIsReceivingFileName), {
@@ -575,15 +620,27 @@ async function cleanup(): Promise<void> {
     clipboardFilesWatcher = null;
   }
 
-  if (filesCleanerTask) {
-    filesCleanerTask.stop();
-    filesCleanerTask = null;
+  if (handleTasks) {
+    if (filesCleanerTask) {
+      filesCleanerTask.stop();
+      filesCleanerTask = null;
+    }
+
+    if (idleDetectorTask) {
+      idleDetectorTask.stop();
+      idleDetectorTask = null;
+    }
   }
+
+  appIcon.setImage(getTrayIcon("suspended"));
+
+  initialized = false;
+  initializingOrUnInitializing = false;
 }
 
 async function reload(): Promise<void> {
   log.info("Reloading configuration...");
-  await cleanup();
+  await unInitialize();
   await initialize();
   if (process.platform === "linux") {
     setContextMenu();
@@ -620,7 +677,7 @@ function setIconFor5Seconds(icon: ClipboardIcon): void {
     clearTimeout(iconWaiter);
   }
   iconWaiter = setTimeout(() => {
-    appIcon.setImage(getTrayIcon("clipboard"));
+    appIcon.setImage(getTrayIcon("working"));
   }, 5000);
 }
 
@@ -864,12 +921,12 @@ async function createAppIcon(): Promise<void> {
     semverGreaterThanOrEqual(os.release(), "10.0.22000")
   ) {
     appIcon = new Tray(
-      getTrayIcon("clipboard"),
+      getTrayIcon("working"),
       // This GUID should not be changed. It ensures the tray icon position is kept between app updates.
       "72812af2-6bcc-40d9-b35d-0b43e72ac346",
     );
   } else {
-    appIcon = new Tray(getTrayIcon("clipboard"));
+    appIcon = new Tray(getTrayIcon("working"));
   }
   setContextMenu();
   appIcon.setToolTip(`${app.name} v${app.getVersion()}`);
@@ -898,7 +955,7 @@ async function cleanupBeforeQuit(): Promise<void> {
   if (cleanupBeforeQuitDone) {
     return;
   }
-  await cleanup();
+  await unInitialize();
   cleanupBeforeQuitDone = true;
 }
 
