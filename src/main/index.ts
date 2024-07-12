@@ -32,8 +32,8 @@ import {
   getNextFileNumber,
   isClipboardTextEmpty,
   isClipboardTextEquals,
-  isIsReceivingFile,
   isThereMoreThanOneClipboardFile,
+  noComputersReceiving,
   parseClipboardFileName,
 } from "./clipboard.js";
 import { hostName, hostNameIsReceivingFileName } from "./global.js";
@@ -118,6 +118,7 @@ let initialized: boolean = false;
 let initializingOrUnInitializing: boolean = false;
 let clipboardListener: ClipboardEventListener = null;
 let clipboardFilesWatcher: chokidar.FSWatcher = null;
+let keepAliveTask: cron.ScheduledTask = null;
 let filesCleanerTask: cron.ScheduledTask = null;
 let idleDetectorTask: cron.ScheduledTask = null;
 let iconWaiter: NodeJS.Timeout = null;
@@ -128,11 +129,7 @@ async function writeClipboardToFile(): Promise<void> {
   const currentTime = Date.now();
 
   // Avoids sending the clipboard if there is no other computer receiving
-  if (
-    (await fs.readdir(syncFolder)).filter(
-      (file) => isIsReceivingFile(file) && file !== hostNameIsReceivingFileName,
-    ).length === 0
-  ) {
+  if (await noComputersReceiving(syncFolder, currentTime)) {
     log.info(
       "No other computer is receiving clipboards. Skipping clipboard send...",
     );
@@ -453,7 +450,7 @@ function askForFolder(): void {
   }
 }
 
-async function initialize(handleTasks = true): Promise<void> {
+async function initialize(fromSuspension = false): Promise<void> {
   initializingOrUnInitializing = true;
 
   syncFolder = config.get("folder");
@@ -545,16 +542,31 @@ async function initialize(handleTasks = true): Promise<void> {
         await readClipboardFromFile(parsedFile);
       });
 
-    // Create a file to indicate that this computer is receiving clipboards
-    await fs.writeFile(path.join(syncFolder, hostNameIsReceivingFileName), "");
+    keepAliveTask = cron.schedule(
+      // every 4 minutes
+      "*/4 * * * *",
+      async () => {
+        if (!syncFolder) {
+          return;
+        }
+        // Create a file to indicate that this computer is receiving clipboards
+        await fs.writeFile(
+          path.join(syncFolder, hostNameIsReceivingFileName),
+          `${Date.now()}`,
+        );
+      },
+      {
+        runOnInit: true,
+      },
+    );
   }
 
-  if (handleTasks) {
+  if (!fromSuspension) {
     if (config.get("autoCleanup", true)) {
       filesCleanerTask = cron.schedule(
         "*/1 * * * *",
-        () => {
-          cleanFiles(syncFolder);
+        async () => {
+          await cleanFiles(syncFolder);
         },
         {
           runOnInit: true,
@@ -582,14 +594,17 @@ async function initialize(handleTasks = true): Promise<void> {
             return;
           }
           log.info("System is active. Resuming...");
-          await initialize(false);
+          await initialize(true);
           return;
         }
 
         if (initialized) {
           log.info("System is idle. Suspending...");
-          await unInitialize(false);
+          await unInitialize(true);
         }
+      },
+      {
+        runOnInit: false,
       },
     );
   }
@@ -600,14 +615,19 @@ async function initialize(handleTasks = true): Promise<void> {
   initializingOrUnInitializing = false;
 }
 
-async function unInitialize(handleTasks = true): Promise<void> {
+async function unInitialize(fromSuspension = false): Promise<void> {
   initializingOrUnInitializing = true;
 
-  // Deletes the file that indicates that this computer is receiving clipboards
-  if (syncFolder) {
-    await fs.rm(path.join(syncFolder, hostNameIsReceivingFileName), {
-      force: true,
-    });
+  if (keepAliveTask) {
+    keepAliveTask.stop();
+    keepAliveTask = null;
+
+    // Deletes the file that indicates that this computer is receiving clipboards
+    if (syncFolder) {
+      await fs.rm(path.join(syncFolder, hostNameIsReceivingFileName), {
+        force: true,
+      });
+    }
   }
 
   if (clipboardListener) {
@@ -620,7 +640,7 @@ async function unInitialize(handleTasks = true): Promise<void> {
     clipboardFilesWatcher = null;
   }
 
-  if (handleTasks) {
+  if (!fromSuspension) {
     if (filesCleanerTask) {
       filesCleanerTask.stop();
       filesCleanerTask = null;
