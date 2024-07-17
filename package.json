@@ -32,7 +32,7 @@
     "follow-redirects": "^1.15.6",
     "fswin": "^3.24.524",
     "node-cron": "^3.0.3",
-    "semver": "^7.6.2"
+    "semver": "^7.6.3"
   },
   "devDependencies": {
     "@electron-forge/cli": "^7.4.0",
