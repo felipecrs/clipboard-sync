@@ -84,6 +84,7 @@ type ConfigType = {
   receiveImages: boolean;
   receiveFiles: boolean;
   autoCleanup: boolean;
+  watchMode: "native" | "polling" | "pollingHarder";
 };
 
 type ClipboardIcon = "working" | "sent" | "received" | "suspended";
@@ -97,6 +98,7 @@ const config = new Store<ConfigType>({
     receiveImages: true,
     receiveFiles: true,
     autoCleanup: true,
+    watchMode: "native",
   },
 });
 
@@ -108,6 +110,7 @@ let lastTextRead: ClipboardText = null;
 let lastImageSha256Read: string = null;
 let lastClipboardFilePathsRead: string[] = null;
 let lastTimeRead: number = null;
+let lastFileNumberRead: number = null;
 
 let lastTextWritten: ClipboardText = null;
 let lastImageSha256Written: string = null;
@@ -117,7 +120,7 @@ let lastFileNumberWritten: number = null;
 let initialized: boolean = false;
 let initializingOrUnInitializing: boolean = false;
 let clipboardListener: ClipboardEventListener = null;
-let clipboardFilesWatcher: chokidar.FSWatcher = null;
+let clipboardFilesWatcher: chokidar.FSWatcher | cron.ScheduledTask = null;
 let keepAliveTask: cron.ScheduledTask = null;
 let filesCleanerTask: cron.ScheduledTask = null;
 let idleDetectorTask: cron.ScheduledTask = null;
@@ -414,6 +417,7 @@ async function readClipboardFromFile(
   }
   log.info(`Clipboard was read from ${file}`);
   lastTimeRead = currentTime;
+  lastFileNumberRead = currentFileNumber;
 
   setIconFor5Seconds("received");
 }
@@ -512,35 +516,84 @@ async function initialize(fromSuspension = false): Promise<void> {
     config.get("receiveFiles", true)
   ) {
     // Watches for files and reads clipboard from it
-    clipboardFilesWatcher = chokidar
-      .watch(syncFolder, {
-        usePolling: config.get("usePolling", false),
-        interval: 1000,
-        binaryInterval: 1000,
-        ignoreInitial: true,
-        disableGlobbing: true,
-        ignored: [
-          // This filters out temporary files created by the OneDrive client, example:
-          // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt.json~RF1a1c3c.TMP"
-          "**/*~*.TMP",
-        ],
-      })
-      .on("add", async (filename) => {
-        const parsedFile = parseClipboardFileName(
-          filename,
-          syncFolder,
-          "from-others",
-        );
+    const watchMode = config.get("watchMode");
+    log.info(`Watch mode: ${watchMode}`);
+    if (watchMode === "pollingHarder") {
+      clipboardFilesWatcher = cron.schedule(
+        "*/2 * * * * *", // every 2 seconds
+        async () => {
+          const files = await fs.readdir(syncFolder);
+          const clipboardFiles: ParsedClipboardFileName[] = [];
+          for (const file of files) {
+            const parsedFile = parseClipboardFileName(
+              path.join(syncFolder, file),
+              syncFolder,
+              "from-others",
+            );
+            if (parsedFile) {
+              clipboardFiles.push(parsedFile);
+            }
+          }
 
-        if (!parsedFile) {
-          return;
-        }
+          // Read the most recent clipboard file
+          if (clipboardFiles.length > 0) {
+            clipboardFiles.sort((a, b) => b.number - a.number);
 
-        // Wait a bit so that the file is fully written
-        await setTimeoutAsync(200);
+            const file = clipboardFiles[0];
 
-        await readClipboardFromFile(parsedFile);
-      });
+            // Avoids reading existing files when first starting
+            if (lastFileNumberRead === null) {
+              lastFileNumberRead = file.number;
+            }
+
+            // Keeping this logic here instead of inside readClipboardFromFile
+            // since this situation can only happen in this watching mode
+            if (
+              clipboardFiles.length > 1 &&
+              lastFileNumberRead &&
+              file.number <= lastFileNumberRead
+            ) {
+              return;
+            }
+
+            await readClipboardFromFile(file);
+          }
+        },
+        {
+          runOnInit: false,
+        },
+      );
+    } else {
+      clipboardFilesWatcher = chokidar
+        .watch(syncFolder, {
+          usePolling: watchMode === "polling",
+          interval: 1000,
+          binaryInterval: 1000,
+          ignoreInitial: true,
+          disableGlobbing: true,
+          ignored: [
+            // This filters out temporary files created by the OneDrive client, example:
+            // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt.json~RF1a1c3c.TMP"
+            "**/*~*.TMP",
+          ],
+        })
+        .on("add", async (filename) => {
+          const parsedFile = parseClipboardFileName(
+            filename,
+            syncFolder,
+            "from-others",
+          );
+
+          if (!parsedFile) {
+            return;
+          }
+
+          // Wait a bit so that the file is fully written
+          await setTimeoutAsync(200);
+
+          await readClipboardFromFile(parsedFile);
+        });
+    }
 
     keepAliveTask = cron.schedule(
       // every 4 minutes
@@ -636,7 +689,11 @@ async function unInitialize(fromSuspension = false): Promise<void> {
   }
 
   if (clipboardFilesWatcher) {
-    await clipboardFilesWatcher.close();
+    if (clipboardFilesWatcher instanceof chokidar.FSWatcher) {
+      await clipboardFilesWatcher.close();
+    } else {
+      clipboardFilesWatcher.stop();
+    }
     clipboardFilesWatcher = null;
   }
 
@@ -703,6 +760,11 @@ function setIconFor5Seconds(icon: ClipboardIcon): void {
 
 function handleCheckBoxClick(checkBox: Electron.MenuItem, key: string): void {
   config.set(key, checkBox.checked);
+  reload();
+}
+
+function handleRadioClick(key: string, value: string): void {
+  config.set(key, value);
   reload();
 }
 
@@ -817,14 +879,14 @@ function setContextMenu(): void {
         {
           label: "Texts",
           type: "checkbox",
-          checked: config.get("sendTexts", true),
+          checked: config.get("sendTexts"),
           click: (checkBox): void => handleCheckBoxClick(checkBox, "sendTexts"),
           toolTip: "Whether to enable sending copied texts or not",
         },
         {
           label: "Images",
           type: "checkbox",
-          checked: config.get("sendImages", true),
+          checked: config.get("sendImages"),
           click: (checkBox): void =>
             handleCheckBoxClick(checkBox, "sendImages"),
           toolTip: "Whether to enable sending copied images or not",
@@ -832,7 +894,7 @@ function setContextMenu(): void {
         {
           label: "Files",
           type: "checkbox",
-          checked: config.get("sendFiles", true),
+          checked: config.get("sendFiles"),
           click: (checkBox): void => handleCheckBoxClick(checkBox, "sendFiles"),
           toolTip: "Whether to enable sending copied files or not",
           visible: !!clipboardEx,
@@ -847,7 +909,7 @@ function setContextMenu(): void {
         {
           label: "Texts",
           type: "checkbox",
-          checked: config.get("receiveTexts", true),
+          checked: config.get("receiveTexts"),
           click: (checkBox): void =>
             handleCheckBoxClick(checkBox, "receiveTexts"),
           toolTip: "Whether to enable receiving texts or not",
@@ -855,7 +917,7 @@ function setContextMenu(): void {
         {
           label: "Images",
           type: "checkbox",
-          checked: config.get("receiveImages", true),
+          checked: config.get("receiveImages"),
           click: (checkBox): void =>
             handleCheckBoxClick(checkBox, "receiveImages"),
           toolTip: "Whether to enable receiving images or not",
@@ -863,7 +925,7 @@ function setContextMenu(): void {
         {
           label: "Files",
           type: "checkbox",
-          checked: config.get("receiveFiles", true),
+          checked: config.get("receiveFiles"),
           click: (checkBox): void =>
             handleCheckBoxClick(checkBox, "receiveFiles"),
           toolTip: "Whether to enable receiving files or not",
@@ -873,16 +935,37 @@ function setContextMenu(): void {
     },
     { type: "separator" },
     {
-      label: "Use polling",
-      type: "checkbox",
-      checked: config.get("usePolling", false),
-      click: (checkBox): void => handleCheckBoxClick(checkBox, "usePolling"),
-      toolTip: `Try enabling this option if ${app.name} is not receiving clipboards, usually on network drives`,
+      label: "Watch mode",
+      type: "submenu",
+      toolTip: "Select how to watch for clipboard files",
+      submenu: [
+        {
+          label: "Native",
+          type: "radio",
+          checked: config.get("watchMode") === "native",
+          click: (): void => handleRadioClick("watchMode", "native"),
+          toolTip: `The default mode. This is the fastest and most efficient way to watch for clipboard files. Use it if it works.`,
+        },
+        {
+          label: "Polling",
+          type: "radio",
+          checked: config.get("watchMode") === "polling",
+          click: (): void => handleRadioClick("watchMode", "polling"),
+          toolTip: `Try this if native mode is not receiving clipboards. It is slower and less efficient than native mode. Usually needed on network drives.`,
+        },
+        {
+          label: "Polling harder",
+          type: "radio",
+          checked: config.get("watchMode") === "pollingHarder",
+          click: (): void => handleRadioClick("watchMode", "pollingHarder"),
+          toolTip: `Try this if polling mode is not receiving clipboards. It is the slowest and least efficient way to watch for clipboard files. Usually needed on WinFSP mounts.`,
+        },
+      ],
     },
     {
       label: "Auto-clean",
       type: "checkbox",
-      checked: config.get("autoCleanup", true),
+      checked: config.get("autoCleanup"),
       click: (checkBox): void => handleCheckBoxClick(checkBox, "autoCleanup"),
       toolTip: `Auto-clean the files created by ${app.name}`,
     },
