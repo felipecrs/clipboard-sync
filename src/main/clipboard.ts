@@ -1,7 +1,8 @@
-import log from "electron-log";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+
+import log from "electron-log";
 
 import {
   hostName,

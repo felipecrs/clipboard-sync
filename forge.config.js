@@ -1,8 +1,9 @@
 // @ts-check
 
+import path from "node:path";
+
 import { MakerDMG } from "@electron-forge/maker-dmg";
 import { MakerSquirrel } from "@electron-forge/maker-squirrel";
-import path from "node:path";
 
 const getAppIcon = () => {
   const iconExtension =
