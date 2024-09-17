@@ -1,5 +1,8 @@
-import chokidar from "chokidar";
-import type { ClipboardEventListener } from "clipboard-event";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { setTimeout as setTimeoutAsync } from "node:timers/promises";
+
 import {
   Menu,
   Notification,
@@ -14,15 +17,18 @@ import {
 import log from "electron-log";
 import Store from "electron-store";
 import { execa } from "execa";
+
+import {
+  FSWatcher as ChokidarFSWatcher,
+  watch as chokidarWatch,
+} from "chokidar";
 import cron from "node-cron";
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 import {
   gt as semverGreaterThan,
   gte as semverGreaterThanOrEqual,
 } from "semver";
-import { setTimeout as setTimeoutAsync } from "timers/promises";
+
+import type { ClipboardEventListener } from "clipboard-event";
 
 import {
   ClipboardText,
@@ -120,7 +126,7 @@ let lastFileNumberWritten: number = null;
 let initialized: boolean = false;
 let initializingOrUnInitializing: boolean = false;
 let clipboardListener: ClipboardEventListener = null;
-let clipboardFilesWatcher: chokidar.FSWatcher | cron.ScheduledTask = null;
+let clipboardFilesWatcher: ChokidarFSWatcher | cron.ScheduledTask = null;
 let keepAliveTask: cron.ScheduledTask = null;
 let filesCleanerTask: cron.ScheduledTask = null;
 let idleDetectorTask: cron.ScheduledTask = null;
@@ -564,35 +570,31 @@ async function initialize(fromSuspension = false): Promise<void> {
         },
       );
     } else {
-      clipboardFilesWatcher = chokidar
-        .watch(syncFolder, {
-          usePolling: watchMode === "polling",
-          interval: 1000,
-          binaryInterval: 1000,
-          ignoreInitial: true,
-          disableGlobbing: true,
-          ignored: [
-            // This filters out temporary files created by the OneDrive client, example:
-            // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt.json~RF1a1c3c.TMP"
-            "**/*~*.TMP",
-          ],
-        })
-        .on("add", async (filename) => {
-          const parsedFile = parseClipboardFileName(
-            filename,
-            syncFolder,
-            "from-others",
-          );
+      clipboardFilesWatcher = chokidarWatch(syncFolder, {
+        usePolling: watchMode === "polling",
+        interval: 1000,
+        binaryInterval: 1000,
+        ignoreInitial: true,
+        // This filters out temporary files created by the OneDrive client, examples:
+        // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt.json~RF1a1c3c.TMP"
+        // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt.json~RF1495807e.TMP"
+        ignored: (filename) => /~RF[0-9a-f]+\.TMP$/.test(filename),
+      }).on("add", async (filename) => {
+        const parsedFile = parseClipboardFileName(
+          filename,
+          syncFolder,
+          "from-others",
+        );
 
-          if (!parsedFile) {
-            return;
-          }
+        if (!parsedFile) {
+          return;
+        }
 
-          // Wait a bit so that the file is fully written
-          await setTimeoutAsync(200);
+        // Wait a bit so that the file is fully written
+        await setTimeoutAsync(200);
 
-          await readClipboardFromFile(parsedFile);
-        });
+        await readClipboardFromFile(parsedFile);
+      });
     }
 
     keepAliveTask = cron.schedule(
@@ -689,7 +691,7 @@ async function unInitialize(fromSuspension = false): Promise<void> {
   }
 
   if (clipboardFilesWatcher) {
-    if (clipboardFilesWatcher instanceof chokidar.FSWatcher) {
+    if (clipboardFilesWatcher instanceof ChokidarFSWatcher) {
       await clipboardFilesWatcher.close();
     } else {
       clipboardFilesWatcher.stop();
