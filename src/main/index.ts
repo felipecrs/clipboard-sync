@@ -22,6 +22,7 @@ import {
   FSWatcher as ChokidarFSWatcher,
   watch as chokidarWatch,
 } from "chokidar";
+import { Clipboard as Clipeasy } from "clipeasy";
 import cron from "node-cron";
 import {
   gt as semverGreaterThan,
@@ -73,12 +74,9 @@ if (process.platform === "darwin") {
   app.dock.hide();
 }
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: clipboard-event is an optional dependency
-let clipboardEx: typeof import("electron-clipboard-ex") | null = null;
-
+let clipEasy: Clipeasy = null;
 if (process.platform !== "linux") {
-  clipboardEx = require("electron-clipboard-ex");
+  clipEasy = new Clipeasy();
 }
 
 type ConfigType = {
@@ -156,11 +154,11 @@ async function writeClipboardToFile(): Promise<void> {
   try {
     // macOS writes text/plain even for uri-list and image/png, so we check
     // them before checking for text/plain
-    if (clipboardFormats.includes("text/uri-list") && clipboardEx) {
+    if (clipboardFormats.includes("text/uri-list") && clipEasy) {
       if (!config.get("sendFiles", true)) {
         return;
       }
-      clipboardFilePaths = clipboardEx.readFilePaths();
+      clipboardFilePaths = clipEasy.readFiles();
       clipboardType = "files";
     } else if (clipboardFormats.includes("image/png")) {
       if (!config.get("sendImages", true)) {
@@ -348,8 +346,8 @@ async function readClipboardFromFile(
   try {
     // macOS writes text/plain even for uri-list and image/png, so we check
     // them before checking for text/plain
-    if (clipboardFormats.includes("text/uri-list") && clipboardEx) {
-      currentFilePaths = clipboardEx.readFilePaths();
+    if (clipboardFormats.includes("text/uri-list") && clipEasy) {
+      currentFilePaths = clipEasy.readFiles();
       currentClipboardType = "files";
     } else if (clipboardFormats.includes("image/png")) {
       currentImage = clipboard.readImage().toPNG();
@@ -417,8 +415,8 @@ async function readClipboardFromFile(
   } else if (fileClipboardType === "image") {
     clipboard.writeImage(nativeImage.createFromBuffer(newImage));
     lastImageSha256Read = newImageSha256;
-  } else if (fileClipboardType === "files" && clipboardEx) {
-    clipboardEx.writeFilePaths(newFilePaths);
+  } else if (fileClipboardType === "files" && clipEasy) {
+    clipEasy.writeFiles(newFilePaths);
     lastClipboardFilePathsRead = newFilePaths;
   }
   log.info(`Clipboard was read from ${file}`);
@@ -899,7 +897,7 @@ function setContextMenu(): void {
           checked: config.get("sendFiles"),
           click: (checkBox): void => handleCheckBoxClick(checkBox, "sendFiles"),
           toolTip: "Whether to enable sending copied files or not",
-          visible: !!clipboardEx,
+          visible: !!clipEasy,
         },
       ],
     },
@@ -931,7 +929,7 @@ function setContextMenu(): void {
           click: (checkBox): void =>
             handleCheckBoxClick(checkBox, "receiveFiles"),
           toolTip: "Whether to enable receiving files or not",
-          visible: !!clipboardEx,
+          visible: !!clipEasy,
         },
       ],
     },
