@@ -24,7 +24,7 @@
   "license": "MIT",
   "repository": "https://github.com/felipecrs/clipboard-sync.git",
   "dependencies": {
-    "chokidar": "^4.0.1",
+    "chokidar": "^4.0.2",
     "clipboard-event": "^1.6.0",
     "electron-log": "^5.2.4",
     "electron-squirrel-startup": "^1.0.1",
