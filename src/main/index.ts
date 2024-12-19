@@ -580,10 +580,6 @@ async function initialize(fromSuspension = false): Promise<void> {
         // "C:\Users\user\OneDrive\Clipboard Sync\1-my-pc.txt.json~RF1495807e.TMP"
         ignored: (filename) => /~RF[0-9a-f]+\.TMP$/.test(filename),
       }).on("add", async (filename) => {
-        if (typeof filename !== "string") {
-          return;
-        }
-
         const parsedFile = parseClipboardFileName(
           filename,
           syncFolder,
