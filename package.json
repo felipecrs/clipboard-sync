@@ -47,7 +47,7 @@
     "electron": "^33.3.1",
     "electron-vite": "^2.3.0",
     "eslint": "^8.57.1",
-    "eslint-config-prettier": "^9.1.0",
+    "eslint-config-prettier": "^10.0.1",
     "execa": "^9.5.2",
     "prettier": "^3.4.2",
     "rimraf": "^6.0.1",
