@@ -44,7 +44,7 @@
     "@types/follow-redirects": "^1.14.4",
     "@types/node-cron": "^3.0.11",
     "@types/semver": "^7.5.8",
-    "electron": "^33.3.1",
+    "electron": "^34.0.0",
     "electron-vite": "^2.3.0",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^10.0.1",
