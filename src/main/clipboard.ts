@@ -19,9 +19,10 @@ import type {
   SetAttributes as FSWinSetAttributes,
 } from "fswin";
 
-let fswin: typeof import("fswin") | null = null;
+let fswin: typeof import("fswin") | undefined;
 
 if (process.platform === "win32") {
+  // eslint-disable-next-line unicorn/prefer-module
   fswin = require("fswin");
 }
 
@@ -36,12 +37,12 @@ export type ParsedClipboardFileName = {
 };
 
 // This function always expects a file, not a folder
-// returns null if not valid
+// returns undefined if not valid
 export const parseClipboardFileName = (
   file: string,
   syncFolder: string,
   filter: "none" | "from-others" | "from-myself" = "none",
-): ParsedClipboardFileName | null => {
+): ParsedClipboardFileName | undefined => {
   let number = 0;
   let clipboardType: ClipboardType;
   let from: "myself" | "others";
@@ -60,30 +61,33 @@ export const parseClipboardFileName = (
   if (match) {
     if (match[5]) {
       clipboardType = "files";
-      filesCount = parseInt(match[5]);
+      filesCount = Number.parseInt(match[5]);
     } else {
       clipboardType = match[3] === "text.json" ? "text" : "image";
     }
     from = match[2] === hostName ? "myself" : "others";
     switch (filter) {
-      case "from-myself":
+      case "from-myself": {
         if (from === "myself") {
-          number = parseInt(match[1]);
+          number = Number.parseInt(match[1]);
         }
         break;
-      case "from-others":
+      }
+      case "from-others": {
         if (from === "others") {
-          number = parseInt(match[1]);
+          number = Number.parseInt(match[1]);
         }
         break;
-      default:
-        number = parseInt(match[1]);
+      }
+      default: {
+        number = Number.parseInt(match[1]);
         break;
+      }
     }
   }
 
   if (number === 0) {
-    return null;
+    return undefined;
   }
 
   return {
@@ -134,13 +138,14 @@ export async function noComputersReceiving(
   syncFolder: string,
   currentTime: number,
 ): Promise<boolean> {
-  const computersReceiving = (await fs.readdir(syncFolder)).filter(
+  const directoryMembers = await fs.readdir(syncFolder);
+  const computersReceiving = directoryMembers.filter(
     (file) => isIsReceivingFile(file) && file !== hostNameIsReceivingFileName,
   );
 
   // This file will be renewed on every 4 minutes, this will conside stale
   // any files older than 10 minutes
-  const tenMinutesAgo = new Date(currentTime - 600000);
+  const tenMinutesAgo = new Date(currentTime - 600_000);
   for (const computerReceiving of computersReceiving) {
     const fileStat = await fs.stat(path.join(syncFolder, computerReceiving));
     if (fileStat.mtime >= tenMinutesAgo) {
@@ -185,7 +190,7 @@ export async function cleanFiles(syncFolder: string): Promise<void> {
     // Delete from myself files older than 5 minutes and
     // from others older than 10 minutes
     const timeThreshold =
-      parsedFile.from === "myself" ? now - 300000 : now - 600000;
+      parsedFile.from === "myself" ? now - 300_000 : now - 600_000;
 
     let fileStat;
     try {
@@ -208,55 +213,54 @@ export async function cleanFiles(syncFolder: string): Promise<void> {
     if (
       process.platform === "win32" &&
       parsedFile.from === "others" &&
-      fileStat.ctime.getTime() <= now - 60000
+      fileStat.ctime.getTime() <= now - 60_000
     ) {
       await unsyncFileOrFolderRecursively(filePath);
     }
   }
 }
 
+function getAttributesWrapper(
+  path: string,
+  callback: (argument0: Error, argument1: FSWinAttributes) => void,
+): void {
+  fswin.getAttributes(path, function (succeeded) {
+    succeeded
+      ? callback(undefined, succeeded)
+      : // eslint-disable-next-line unicorn/no-useless-undefined
+        callback(new Error(`Failed to set attributes of ${path}`), undefined);
+  });
+}
+
+function setAttributesWrapper(
+  path: string,
+  attributes: FSWinSetAttributes,
+  callback: (argument0: Error, argument1: undefined) => void,
+): void {
+  fswin.setAttributes(path, attributes, function (succeeded) {
+    succeeded
+      ? // eslint-disable-next-line unicorn/no-useless-undefined
+        callback(undefined, undefined)
+      : // eslint-disable-next-line unicorn/no-useless-undefined
+        callback(new Error(`Failed to set attributes of ${path}`), undefined);
+  });
+}
+
 export async function unsyncFileOrFolderRecursively(
   fileOrFolder: string,
 ): Promise<void> {
-  function getAttributesWrapper(
-    path: string,
-    callback: (arg0: Error, arg1: FSWinAttributes) => void,
-  ): void {
-    fswin.getAttributes(path, function (result) {
-      if (result) {
-        callback(null, result);
-      } else {
-        callback(new Error(`Failed to set attributes of ${path}`), null);
-      }
-    });
-  }
-
-  function setAttributesWrapper(
-    path: string,
-    attributes: FSWinSetAttributes,
-    callback: (arg0: Error, arg1: null) => void,
-  ): void {
-    fswin.setAttributes(path, attributes, function (succeeded) {
-      if (succeeded) {
-        callback(null, null);
-      } else {
-        callback(new Error(`Failed to set attributes of ${path}`), null);
-      }
-    });
-  }
-
   const getAttributesAsync = promisify(getAttributesWrapper);
   const setAttributesAsync = promisify(setAttributesWrapper);
 
   await iterateThroughFilesRecursively([fileOrFolder], async (file) => {
     // Only unsync file if it has IS_REPARSE_POINT attribute
-    if ((await getAttributesAsync(file)).IS_REPARSE_POINT) {
+    const attributes = await getAttributesAsync(file);
+    if (attributes.IS_REPARSE_POINT) {
       log.info(`Unsyncing: ${file}`);
       await setAttributesAsync(file, {
         IS_UNPINNED: true,
         IS_PINNED: false,
       });
-      return;
     }
   });
 }
