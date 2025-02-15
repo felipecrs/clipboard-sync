@@ -53,6 +53,7 @@ import {
 } from "./utils.js";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
+// eslint-disable-next-line unicorn/no-await-expression-member
 if ((await import("electron-squirrel-startup")).default) {
   console.error("Squirrel event handled. Quitting...");
   app.exit();
@@ -73,11 +74,11 @@ if (process.platform === "darwin") {
   app.dock.hide();
 }
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: clipboard-event is an optional dependency
-let clipboardEx: typeof import("electron-clipboard-ex") | null = null;
+let clipboardEx: typeof import("electron-clipboard-ex") | undefined;
 
 if (process.platform !== "linux") {
+  // eslint-disable-next-line unicorn/prefer-module
   clipboardEx = require("electron-clipboard-ex");
 }
 
@@ -108,31 +109,31 @@ const config = new Store<ConfigType>({
   },
 });
 
-let appIcon: Tray = null;
+let appIcon: Tray;
 
-let syncFolder: string = null;
+let syncFolder: string;
 
-let lastTextRead: ClipboardText = null;
-let lastImageSha256Read: string = null;
-let lastClipboardFilePathsRead: string[] = null;
-let lastTimeRead: number = null;
-let lastFileNumberRead: number = null;
+let lastTextRead: ClipboardText;
+let lastImageSha256Read: string;
+let lastClipboardFilePathsRead: string[];
+let lastTimeRead: number;
+let lastFileNumberRead: number;
 
-let lastTextWritten: ClipboardText = null;
-let lastImageSha256Written: string = null;
-let lastTimeWritten: number = null;
-let lastFileNumberWritten: number = null;
+let lastTextWritten: ClipboardText;
+let lastImageSha256Written: string;
+let lastTimeWritten: number;
+let lastFileNumberWritten: number;
 
 let initialized: boolean = false;
 let initializingOrUnInitializing: boolean = false;
-let clipboardListener: ClipboardEventListener = null;
-let clipboardFilesWatcher: ChokidarFSWatcher | cron.ScheduledTask = null;
-let keepAliveTask: cron.ScheduledTask = null;
-let filesCleanerTask: cron.ScheduledTask = null;
-let idleDetectorTask: cron.ScheduledTask = null;
-let iconWaiter: NodeJS.Timeout = null;
+let clipboardListener: ClipboardEventListener;
+let clipboardFilesWatcher: ChokidarFSWatcher | cron.ScheduledTask;
+let keepAliveTask: cron.ScheduledTask;
+let filesCleanerTask: cron.ScheduledTask;
+let idleDetectorTask: cron.ScheduledTask;
+let iconWaiter: NodeJS.Timeout;
 
-let lastTimeClipboardChecked: number = null;
+let lastTimeClipboardChecked: number;
 
 async function writeClipboardToFile(): Promise<void> {
   const currentTime = Date.now();
@@ -207,7 +208,7 @@ async function writeClipboardToFile(): Promise<void> {
         currentTime - lastTimeRead < 5000 &&
         isClipboardTextEquals(lastTextRead, clipboardText)) ||
       (lastTimeWritten &&
-        currentTime - lastTimeWritten < 10000 &&
+        currentTime - lastTimeWritten < 10_000 &&
         isClipboardTextEquals(lastTextWritten, clipboardText)))
   ) {
     return;
@@ -220,7 +221,7 @@ async function writeClipboardToFile(): Promise<void> {
         currentTime - lastTimeRead < 5000 &&
         lastImageSha256Read === clipboardImageSha256) ||
       (lastTimeWritten &&
-        currentTime - lastTimeWritten < 10000 &&
+        currentTime - lastTimeWritten < 10_000 &&
         lastImageSha256Written === clipboardImageSha256))
   ) {
     return;
@@ -239,41 +240,49 @@ async function writeClipboardToFile(): Promise<void> {
 
   const fileNumber = await getNextFileNumber(syncFolder);
   let destinationPath: string;
-  if (clipboardType === "text") {
-    destinationPath = path.join(
-      syncFolder,
-      `${fileNumber}-${hostName}.text.json`,
-    );
-    await fs.writeFile(
-      destinationPath,
-      JSON.stringify(clipboardText, null, 2),
-      {
-        encoding: "utf8",
-      },
-    );
-    lastTextWritten = clipboardText;
-  } else if (clipboardType === "image") {
-    destinationPath = path.join(syncFolder, `${fileNumber}-${hostName}.png`);
-    await fs.writeFile(destinationPath, clipboardImage);
-    lastImageSha256Written = clipboardImageSha256;
-  } else if (clipboardType === "files") {
-    filesCount = await getTotalNumberOfFiles(clipboardFilePaths);
-    destinationPath = path.join(
-      syncFolder,
-      `${fileNumber}-${hostName}.${filesCount}_files`,
-    );
-    await fs.mkdir(destinationPath);
-    for (const filePath of clipboardFilePaths) {
-      const fullDestination = path.join(
-        destinationPath,
-        path.basename(filePath),
+  switch (clipboardType) {
+    case "text": {
+      destinationPath = path.join(
+        syncFolder,
+        `${fileNumber}-${hostName}.text.json`,
       );
-      if ((await fs.stat(filePath)).isDirectory()) {
-        await copyFolderRecursive(filePath, fullDestination);
-      } else {
-        await fs.copyFile(filePath, fullDestination);
-      }
+      await fs.writeFile(
+        destinationPath,
+        JSON.stringify(clipboardText, undefined, 2),
+        { encoding: "utf8" },
+      );
+      lastTextWritten = clipboardText;
+
+      break;
     }
+    case "image": {
+      destinationPath = path.join(syncFolder, `${fileNumber}-${hostName}.png`);
+      await fs.writeFile(destinationPath, clipboardImage);
+      lastImageSha256Written = clipboardImageSha256;
+
+      break;
+    }
+    case "files": {
+      filesCount = await getTotalNumberOfFiles(clipboardFilePaths);
+      destinationPath = path.join(
+        syncFolder,
+        `${fileNumber}-${hostName}.${filesCount}_files`,
+      );
+      await fs.mkdir(destinationPath);
+      for (const filePath of clipboardFilePaths) {
+        const fullDestination = path.join(
+          destinationPath,
+          path.basename(filePath),
+        );
+        const stat = await fs.stat(filePath);
+        stat.isDirectory()
+          ? copyFolderRecursive(filePath, fullDestination)
+          : fs.copyFile(filePath, fullDestination);
+      }
+
+      break;
+    }
+    // No default
   }
   log.info(`Clipboard written to ${destinationPath}`);
   lastTimeWritten = currentTime;
@@ -297,41 +306,51 @@ async function readClipboardFromFile(
   let newFilePaths: string[];
   let newFilesCount: number;
   try {
-    if (fileClipboardType === "text") {
-      if (!config.get("receiveTexts", true)) {
-        return;
+    switch (fileClipboardType) {
+      case "text": {
+        if (!config.get("receiveTexts", true)) {
+          return;
+        }
+        newText = JSON.parse(await fs.readFile(file, { encoding: "utf8" }));
+
+        break;
       }
-      newText = JSON.parse(
-        await fs.readFile(file, {
-          encoding: "utf8",
-        }),
-      );
-    } else if (fileClipboardType === "image") {
-      if (!config.get("receiveImages", true)) {
-        return;
+      case "image": {
+        if (!config.get("receiveImages", true)) {
+          return;
+        }
+        newImage = await fs.readFile(file);
+        newImageSha256 = calculateSha256(newImage);
+
+        break;
       }
-      newImage = await fs.readFile(file);
-      newImageSha256 = calculateSha256(newImage);
-    } else if (fileClipboardType === "files") {
-      if (!config.get("receiveFiles", true)) {
-        return;
-      }
-      newFilesCount = parsedFile.filesCount;
-      if (!newFilesCount) {
-        // This should not happen, but just in case
-        log.warn(`Could not read the number of files in ${file}. Skipping...`);
-        return;
-      }
-      const filesCountInFolder = await getTotalNumberOfFiles([file]);
-      if (newFilesCount !== filesCountInFolder) {
-        log.info(
-          `Not all files are yet present in _files folder. Current: ${filesCountInFolder}, expected: ${newFilesCount}. Skipping...`,
+      case "files": {
+        if (!config.get("receiveFiles", true)) {
+          return;
+        }
+        newFilesCount = parsedFile.filesCount;
+        if (!newFilesCount) {
+          // This should not happen, but just in case
+          log.warn(
+            `Could not read the number of files in ${file}. Skipping...`,
+          );
+          return;
+        }
+        const filesCountInFolder = await getTotalNumberOfFiles([file]);
+        if (newFilesCount !== filesCountInFolder) {
+          log.info(
+            `Not all files are yet present in _files folder. Current: ${filesCountInFolder}, expected: ${newFilesCount}. Skipping...`,
+          );
+          return;
+        }
+        const directoryMembers = await fs.readdir(file);
+        newFilePaths = directoryMembers.map((fileName: string) =>
+          path.join(file, fileName),
         );
-        return;
+
+        break;
       }
-      newFilePaths = (await fs.readdir(file)).map((fileName: string) =>
-        path.join(file, fileName),
-      );
+      // No default
     }
   } catch (error) {
     log.error(`Error reading clipboard ${file}:\n${error}`);
@@ -465,12 +484,13 @@ async function initialize(fromSuspension = false): Promise<void> {
 
   syncFolder = config.get("folder");
 
-  if (!(typeof syncFolder === "string" || typeof syncFolder === "undefined")) {
+  if (!(typeof syncFolder === "string" || syncFolder === undefined)) {
     return;
   }
 
   try {
-    if (!syncFolder || !(await fs.lstat(syncFolder)).isDirectory()) {
+    const stat = await fs.lstat(syncFolder);
+    if (!syncFolder || !stat.isDirectory()) {
       askForFolder();
     }
   } catch (error) {
@@ -496,6 +516,7 @@ async function initialize(fromSuspension = false): Promise<void> {
     config.get("sendImages", true) ||
     config.get("sendFiles", true)
   ) {
+    // eslint-disable-next-line unicorn/no-await-expression-member
     clipboardListener = (await import("clipboard-event")).default;
     clipboardListener.startListening();
     clipboardListener.on("change", async () => {
@@ -548,7 +569,7 @@ async function initialize(fromSuspension = false): Promise<void> {
             const file = clipboardFiles[0];
 
             // Avoids reading existing files when first starting
-            if (lastFileNumberRead === null) {
+            if (lastFileNumberRead === undefined) {
               lastFileNumberRead = file.number;
             }
 
@@ -565,9 +586,7 @@ async function initialize(fromSuspension = false): Promise<void> {
             await readClipboardFromFile(file);
           }
         },
-        {
-          runOnInit: false,
-        },
+        { runOnInit: false },
       );
     } else {
       clipboardFilesWatcher = chokidarWatch(syncFolder, {
@@ -610,9 +629,7 @@ async function initialize(fromSuspension = false): Promise<void> {
           `${Date.now()}`,
         );
       },
-      {
-        runOnInit: true,
-      },
+      { runOnInit: true },
     );
   }
 
@@ -623,9 +640,7 @@ async function initialize(fromSuspension = false): Promise<void> {
         async () => {
           await cleanFiles(syncFolder);
         },
-        {
-          runOnInit: true,
-        },
+        { runOnInit: true },
       );
     }
 
@@ -658,9 +673,7 @@ async function initialize(fromSuspension = false): Promise<void> {
           await unInitialize(true);
         }
       },
-      {
-        runOnInit: false,
-      },
+      { runOnInit: false },
     );
   }
 
@@ -675,7 +688,7 @@ async function unInitialize(fromSuspension = false): Promise<void> {
 
   if (keepAliveTask) {
     keepAliveTask.stop();
-    keepAliveTask = null;
+    keepAliveTask = undefined;
 
     // Deletes the file that indicates that this computer is receiving clipboards
     if (syncFolder) {
@@ -687,7 +700,7 @@ async function unInitialize(fromSuspension = false): Promise<void> {
 
   if (clipboardListener) {
     clipboardListener.stopListening();
-    clipboardListener = null;
+    clipboardListener = undefined;
   }
 
   if (clipboardFilesWatcher) {
@@ -696,18 +709,18 @@ async function unInitialize(fromSuspension = false): Promise<void> {
     } else {
       clipboardFilesWatcher.stop();
     }
-    clipboardFilesWatcher = null;
+    clipboardFilesWatcher = undefined;
   }
 
   if (!fromSuspension) {
     if (filesCleanerTask) {
       filesCleanerTask.stop();
-      filesCleanerTask = null;
+      filesCleanerTask = undefined;
     }
 
     if (idleDetectorTask) {
       idleDetectorTask.stop();
-      idleDetectorTask = null;
+      idleDetectorTask = undefined;
     }
   }
 
@@ -773,11 +786,7 @@ function handleRadioClick(key: string, value: string): void {
 let updateLabel = "Check for updates";
 
 async function isUpdateAvailable(): Promise<
-  | false
-  | {
-      newVersion: string;
-      newVersionUrl: string;
-    }
+  false | { newVersion: string; newVersionUrl: string }
 > {
   let newVersionUrl;
   try {
@@ -801,10 +810,7 @@ async function isUpdateAvailable(): Promise<
   if (semverGreaterThan(newVersion, currentVersion)) {
     updateLabel = "Download update";
     setContextMenu();
-    return {
-      newVersion,
-      newVersionUrl,
-    };
+    return { newVersion, newVersionUrl };
   }
 
   return false;
@@ -857,10 +863,7 @@ async function restartOneDrive(): Promise<void> {
   const result = await execa(
     "PowerShell.exe",
     ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath],
-    {
-      reject: false,
-      all: true,
-    },
+    { reject: false, all: true },
   );
 
   log.info(result.all);
@@ -976,9 +979,7 @@ function setContextMenu(): void {
       type: "checkbox",
       checked: app.getLoginItemSettings().openAtLogin,
       click: (checkBox: Electron.MenuItem): void => {
-        app.setLoginItemSettings({
-          openAtLogin: checkBox.checked,
-        });
+        app.setLoginItemSettings({ openAtLogin: checkBox.checked });
       },
       visible: process.platform !== "linux",
     },
@@ -999,11 +1000,7 @@ function setContextMenu(): void {
       click: restartOneDrive,
     },
     { type: "separator" },
-    {
-      label: updateLabel,
-      type: "normal",
-      click: checkForUpdatesPress,
-    },
+    { label: updateLabel, type: "normal", click: checkForUpdatesPress },
     {
       label: "GitHub",
       type: "normal",
@@ -1014,11 +1011,7 @@ function setContextMenu(): void {
         "Open the GitHub page of the project. Please star it if you like it!",
     },
     { type: "separator" },
-    {
-      label: "Exit",
-      type: "normal",
-      click: (): void => quit(),
-    },
+    { label: "Exit", type: "normal", click: (): void => quit() },
   ]);
   appIcon.setContextMenu(menu);
 }

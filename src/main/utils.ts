@@ -8,29 +8,30 @@ import log from "electron-log";
 
 import followRedirects from "follow-redirects";
 
-export function isArrayEquals(arr1?: unknown[], arr2?: unknown[]): boolean {
-  if (arr1 && arr2 && arr1.length == arr2.length) {
-    arr1 = arr1.sort();
-    arr2 = arr2.sort();
-    return arr1.every((u: unknown, i: number) => u === arr2[i]);
+export function isArrayEquals(array1?: unknown[], array2?: unknown[]): boolean {
+  if (array1 && array2 && array1.length === array2.length) {
+    array1 = array1.sort();
+    array2 = array2.sort();
+    return array1.every((u: unknown, index: number) => u === array2[index]);
   }
   return false;
 }
 
 export async function iterateThroughFilesRecursively(
   paths: string[],
-  fn: (arg0: string) => unknown,
+  function_: (argument0: string) => unknown,
 ): Promise<unknown[]> {
   const results: unknown[] = [];
   for (const fileOrFolder of paths) {
     try {
-      if ((await fs.lstat(fileOrFolder)).isDirectory()) {
+      const stat = await fs.lstat(fileOrFolder);
+      if (stat.isDirectory()) {
         const files = await fs.readdir(fileOrFolder);
         for (const file of files) {
           const filePath = path.join(fileOrFolder, file);
           const subResults = await iterateThroughFilesRecursively(
             [filePath],
-            fn,
+            function_,
           );
           for (const result of subResults) {
             if (result) {
@@ -39,13 +40,13 @@ export async function iterateThroughFilesRecursively(
           }
         }
       } else {
-        const result = fn(fileOrFolder);
+        const result = function_(fileOrFolder);
         if (result) {
           results.push(result);
         }
       }
-    } catch (err) {
-      log.error(`Error while iterating through ${fileOrFolder}:\n${err}`);
+    } catch (error) {
+      log.error(`Error while iterating through ${fileOrFolder}:\n${error}`);
     }
   }
   return results;
@@ -64,7 +65,8 @@ export const getTotalNumberOfFiles = async (
 export const getFilesSizeInMb = async (paths: string[]): Promise<number> => {
   let totalSize = 0;
   const results = await iterateThroughFilesRecursively(paths, async (file) => {
-    return (await fs.lstat(file)).size / (1024 * 1024);
+    const stat = await fs.lstat(file);
+    return stat.size / (1024 * 1024);
   });
   for (const size of results) {
     if (typeof size === "number") {
@@ -80,7 +82,8 @@ export async function deleteFileOrFolderRecursively(
   fileOrFolder: string,
 ): Promise<void> {
   try {
-    if ((await fs.lstat(fileOrFolder)).isDirectory()) {
+    const stat = await fs.lstat(fileOrFolder);
+    if (stat.isDirectory()) {
       const files = await fs.readdir(fileOrFolder);
       for (const file of files) {
         const filePath = path.join(fileOrFolder, file);
@@ -92,8 +95,8 @@ export async function deleteFileOrFolderRecursively(
       // delete file
       await fs.unlink(fileOrFolder);
     }
-  } catch (err) {
-    log.error(`Error deleting ${fileOrFolder}:\n${err}`);
+  } catch (error) {
+    log.error(`Error deleting ${fileOrFolder}:\n${error}`);
   }
 }
 
@@ -104,15 +107,12 @@ export async function copyFolderRecursive(
   await fs.mkdir(destination, { recursive: true });
   const files = await fs.readdir(source);
   for (const file of files) {
-    const curPath = path.join(source, file);
-    const fullDestination = path.join(destination, path.basename(curPath));
-    if ((await fs.lstat(curPath)).isDirectory()) {
-      // recurse
-      await copyFolderRecursive(curPath, fullDestination);
-    } else {
-      // copy file
-      await fs.copyFile(curPath, fullDestination);
-    }
+    const currentPath = path.join(source, file);
+    const fullDestination = path.join(destination, path.basename(currentPath));
+    const stat = await fs.lstat(currentPath);
+    stat.isDirectory()
+      ? await copyFolderRecursive(currentPath, fullDestination)
+      : await fs.copyFile(currentPath, fullDestination);
   }
 }
 
@@ -126,15 +126,15 @@ export async function getRedirectedUrl(
   const result = await promisify(
     (
       requestOptions: RequestOptions,
-      callback: (arg0: unknown, arg1: string) => void,
+      callback: (argument0: unknown, argument1: string) => void,
     ) => {
-      const requestObj = followRedirects.https.request(
+      const requestObject = followRedirects.https.request(
         requestOptions,
         (response) => {
-          callback(null, response.responseUrl);
+          callback(undefined, response.responseUrl);
         },
       );
-      requestObj.end();
+      requestObject.end();
     },
   )(requestOptions);
   if (typeof result === "string") {
