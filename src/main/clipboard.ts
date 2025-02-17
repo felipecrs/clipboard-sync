@@ -22,8 +22,8 @@ import type {
 let fswin: typeof import("fswin") | undefined;
 
 if (process.platform === "win32") {
-  // eslint-disable-next-line unicorn/prefer-module
-  fswin = require("fswin");
+  const { default: fswinModule } = await import("fswin");
+  fswin = fswinModule;
 }
 
 export type ClipboardType = "text" | "image" | "files";
