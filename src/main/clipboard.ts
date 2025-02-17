@@ -12,7 +12,7 @@ import {
 import {
   deleteFileOrFolderRecursively,
   iterateThroughFilesRecursively,
-} from "./utils.js";
+} from "./utilities.js";
 
 import type {
   Attributes as FSWinAttributes,
