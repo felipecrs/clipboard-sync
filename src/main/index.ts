@@ -50,7 +50,7 @@ import {
   getRedirectedUrl,
   getTotalNumberOfFiles,
   isArrayEquals,
-} from "./utils.js";
+} from "./utilities.js";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 {
