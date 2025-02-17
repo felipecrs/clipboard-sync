@@ -53,10 +53,14 @@ import {
 } from "./utils.js";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
-// eslint-disable-next-line unicorn/no-await-expression-member
-if ((await import("electron-squirrel-startup")).default) {
-  console.error("Squirrel event handled. Quitting...");
-  app.exit();
+{
+  const { default: squirrelStartup } = await import(
+    "electron-squirrel-startup"
+  );
+  if (squirrelStartup) {
+    console.error("Squirrel event handled. Quitting...");
+    app.exit();
+  }
 }
 
 const gotTheLock = app.requestSingleInstanceLock();
@@ -516,8 +520,8 @@ async function initialize(fromSuspension = false): Promise<void> {
     config.get("sendImages", true) ||
     config.get("sendFiles", true)
   ) {
-    // eslint-disable-next-line unicorn/no-await-expression-member
-    clipboardListener = (await import("clipboard-event")).default;
+    const { default: clipboardEvent } = await import("clipboard-event");
+    clipboardListener = clipboardEvent;
     clipboardListener.startListening();
     clipboardListener.on("change", async () => {
       // Prevents duplicated clipboard events

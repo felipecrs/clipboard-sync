@@ -14,6 +14,7 @@ export default [
     rules: {
       "unicorn/prefer-ternary": ["error", "only-single-line"],
       "unicorn/no-nested-ternary": "off",
+      "unicorn/no-useless-undefined": ["error", { checkArguments: false }],
     },
   },
 ];

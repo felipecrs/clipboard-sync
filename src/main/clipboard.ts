@@ -227,8 +227,7 @@ function getAttributesWrapper(
   fswin.getAttributes(path, function (succeeded) {
     succeeded
       ? callback(undefined, succeeded)
-      : // eslint-disable-next-line unicorn/no-useless-undefined
-        callback(new Error(`Failed to set attributes of ${path}`), undefined);
+      : callback(new Error(`Failed to set attributes of ${path}`), undefined);
   });
 }
 
@@ -239,10 +238,8 @@ function setAttributesWrapper(
 ): void {
   fswin.setAttributes(path, attributes, function (succeeded) {
     succeeded
-      ? // eslint-disable-next-line unicorn/no-useless-undefined
-        callback(undefined, undefined)
-      : // eslint-disable-next-line unicorn/no-useless-undefined
-        callback(new Error(`Failed to set attributes of ${path}`), undefined);
+      ? callback(undefined, undefined)
+      : callback(new Error(`Failed to set attributes of ${path}`), undefined);
   });
 }
 
