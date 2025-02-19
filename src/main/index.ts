@@ -121,7 +121,7 @@ let lastTextRead: ClipboardText;
 let lastImageSha256Read: string;
 let lastClipboardFilePathsRead: string[];
 let lastTimeRead: number;
-let lastFileNumberRead: number;
+let lastFileNumberReadFound: number;
 
 let lastTextWritten: ClipboardText;
 let lastImageSha256Written: string;
@@ -312,6 +312,7 @@ async function readClipboardFromFile(
   try {
     switch (fileClipboardType) {
       case "text": {
+        lastFileNumberReadFound = currentFileNumber;
         if (!config.get("receiveTexts", true)) {
           return;
         }
@@ -320,6 +321,7 @@ async function readClipboardFromFile(
         break;
       }
       case "image": {
+        lastFileNumberReadFound = currentFileNumber;
         if (!config.get("receiveImages", true)) {
           return;
         }
@@ -330,23 +332,31 @@ async function readClipboardFromFile(
       }
       case "files": {
         if (!config.get("receiveFiles", true)) {
+          lastFileNumberReadFound = currentFileNumber;
           return;
         }
         newFilesCount = parsedFile.filesCount;
+
         if (!newFilesCount) {
           // This should not happen, but just in case
           log.warn(
             `Could not read the number of files in ${file}. Skipping...`,
           );
+          lastFileNumberReadFound = currentFileNumber;
           return;
         }
+
         const filesCountInFolder = await getTotalNumberOfFiles([file]);
         if (newFilesCount !== filesCountInFolder) {
           log.info(
             `Not all files are yet present in _files folder. Current: ${filesCountInFolder}, expected: ${newFilesCount}. Skipping...`,
           );
+          // lastFileNumberRead is not set here to allow reading this clipboard
+          // again when more files are present
           return;
         }
+
+        lastFileNumberReadFound = currentFileNumber;
         const directoryMembers = await fs.readdir(file);
         newFilePaths = directoryMembers.map((fileName: string) =>
           path.join(file, fileName),
@@ -446,7 +456,6 @@ async function readClipboardFromFile(
   }
   log.info(`Clipboard was read from ${file}`);
   lastTimeRead = currentTime;
-  lastFileNumberRead = currentFileNumber;
 
   setIconFor5Seconds("received");
 }
@@ -573,16 +582,16 @@ async function initialize(fromSuspension = false): Promise<void> {
             const file = clipboardFiles[0];
 
             // Avoids reading existing files when first starting
-            if (lastFileNumberRead === undefined) {
-              lastFileNumberRead = file.number;
+            if (lastFileNumberReadFound === undefined) {
+              lastFileNumberReadFound = file.number;
             }
 
             // Keeping this logic here instead of inside readClipboardFromFile
             // since this situation can only happen in this watching mode
             if (
               clipboardFiles.length > 1 &&
-              lastFileNumberRead &&
-              file.number <= lastFileNumberRead
+              lastFileNumberReadFound &&
+              file.number <= lastFileNumberReadFound
             ) {
               return;
             }
