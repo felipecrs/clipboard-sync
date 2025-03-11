@@ -24,7 +24,7 @@ jobs:
       - if: matrix.os == 'macos'
         uses: actions/setup-python@v5
         with:
-          python-version: "3"
+          python-version: "3.13.2"
       - if: matrix.os == 'macos'
         run: pip install setuptools
       - run: npm ci
@@ -46,7 +46,7 @@ jobs:
       - if: matrix.os == 'macos'
         uses: actions/setup-python@v5
         with:
-          python-version: "3"
+          python-version: "3.13.2"
       - if: matrix.os == 'macos'
         run: pip install setuptools
       - run: npm ci
