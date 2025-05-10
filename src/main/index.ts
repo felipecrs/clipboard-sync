@@ -22,7 +22,7 @@ import {
   FSWatcher as ChokidarFSWatcher,
   watch as chokidarWatch,
 } from "chokidar";
-import cron from "node-cron";
+import cronImport, { ScheduledTask } from "node-cron";
 import {
   gt as semverGreaterThan,
   gte as semverGreaterThanOrEqual,
@@ -78,6 +78,8 @@ if (process.platform === "darwin") {
   app.dock.hide();
 }
 
+// https://github.com/node-cron/node-cron/issues/440
+const cron = cronImport.default;
 // @ts-ignore: clipboard-event is an optional dependency
 let clipboardEx: typeof import("electron-clipboard-ex") | undefined;
 
@@ -131,10 +133,10 @@ let lastFileNumberWritten: number;
 let initialized: boolean = false;
 let initializingOrUnInitializing: boolean = false;
 let clipboardListener: ClipboardEventListener;
-let clipboardFilesWatcher: ChokidarFSWatcher | cron.ScheduledTask;
-let keepAliveTask: cron.ScheduledTask;
-let filesCleanerTask: cron.ScheduledTask;
-let idleDetectorTask: cron.ScheduledTask;
+let clipboardFilesWatcher: ChokidarFSWatcher | ScheduledTask;
+let keepAliveTask: ScheduledTask;
+let filesCleanerTask: ScheduledTask;
+let idleDetectorTask: ScheduledTask;
 let iconWaiter: NodeJS.Timeout;
 
 let lastTimeClipboardChecked: number;
@@ -599,7 +601,6 @@ async function initialize(fromSuspension = false): Promise<void> {
             await readClipboardFromFile(file);
           }
         },
-        { runOnInit: false },
       );
     } else {
       clipboardFilesWatcher = chokidarWatch(syncFolder, {
@@ -642,19 +643,16 @@ async function initialize(fromSuspension = false): Promise<void> {
           `${Date.now()}`,
         );
       },
-      { runOnInit: true },
     );
+    keepAliveTask.execute();
   }
 
   if (!fromSuspension) {
     if (config.get("autoCleanup", true)) {
-      filesCleanerTask = cron.schedule(
-        "*/1 * * * *",
-        async () => {
-          await cleanFiles(syncFolder);
-        },
-        { runOnInit: true },
-      );
+      filesCleanerTask = cron.schedule("*/1 * * * *", async () => {
+        await cleanFiles(syncFolder);
+      });
+      filesCleanerTask.execute();
     }
 
     idleDetectorTask = cron.schedule(
@@ -686,7 +684,6 @@ async function initialize(fromSuspension = false): Promise<void> {
           await unInitialize(true);
         }
       },
-      { runOnInit: false },
     );
   }
 
