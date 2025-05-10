@@ -22,7 +22,7 @@ import {
   FSWatcher as ChokidarFSWatcher,
   watch as chokidarWatch,
 } from "chokidar";
-import cronImport, { ScheduledTask } from "node-cron";
+import cron from "node-cron";
 import {
   gt as semverGreaterThan,
   gte as semverGreaterThanOrEqual,
@@ -78,8 +78,6 @@ if (process.platform === "darwin") {
   app.dock.hide();
 }
 
-// https://github.com/node-cron/node-cron/issues/440
-const cron = cronImport.default;
 // @ts-ignore: clipboard-event is an optional dependency
 let clipboardEx: typeof import("electron-clipboard-ex") | undefined;
 
@@ -133,10 +131,10 @@ let lastFileNumberWritten: number;
 let initialized: boolean = false;
 let initializingOrUnInitializing: boolean = false;
 let clipboardListener: ClipboardEventListener;
-let clipboardFilesWatcher: ChokidarFSWatcher | ScheduledTask;
-let keepAliveTask: ScheduledTask;
-let filesCleanerTask: ScheduledTask;
-let idleDetectorTask: ScheduledTask;
+let clipboardFilesWatcher: ChokidarFSWatcher | cron.ScheduledTask;
+let keepAliveTask: cron.ScheduledTask;
+let filesCleanerTask: cron.ScheduledTask;
+let idleDetectorTask: cron.ScheduledTask;
 let iconWaiter: NodeJS.Timeout;
 
 let lastTimeClipboardChecked: number;
@@ -561,6 +559,7 @@ async function initialize(fromSuspension = false): Promise<void> {
     const watchMode = config.get("watchMode");
     log.info(`Watch mode: ${watchMode}`);
     if (watchMode === "pollingHarder") {
+      // @ts-expect-error https://github.com/node-cron/node-cron/issues/440
       clipboardFilesWatcher = cron.schedule(
         "*/2 * * * * *", // every 2 seconds
         async () => {
@@ -630,6 +629,7 @@ async function initialize(fromSuspension = false): Promise<void> {
       });
     }
 
+    // @ts-expect-error https://github.com/node-cron/node-cron/issues/440
     keepAliveTask = cron.schedule(
       // every 4 minutes
       "*/4 * * * *",
@@ -649,12 +649,14 @@ async function initialize(fromSuspension = false): Promise<void> {
 
   if (!fromSuspension) {
     if (config.get("autoCleanup", true)) {
+      // @ts-expect-error https://github.com/node-cron/node-cron/issues/440
       filesCleanerTask = cron.schedule("*/1 * * * *", async () => {
         await cleanFiles(syncFolder);
       });
       filesCleanerTask.execute();
     }
 
+    // @ts-expect-error https://github.com/node-cron/node-cron/issues/440
     idleDetectorTask = cron.schedule(
       "* * * * * *", // every second
       async () => {
