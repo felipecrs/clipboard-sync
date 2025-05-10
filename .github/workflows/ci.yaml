@@ -54,7 +54,7 @@ jobs:
       - run: npm run make
       - uses: softprops/action-gh-release@v2
         with:
-          draft: true
+          make_latest: true
           files: |
             out/make/**/*.exe
             out/make/**/*.dmg
