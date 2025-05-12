@@ -559,7 +559,6 @@ async function initialize(fromSuspension = false): Promise<void> {
     const watchMode = config.get("watchMode");
     log.info(`Watch mode: ${watchMode}`);
     if (watchMode === "pollingHarder") {
-      // @ts-expect-error https://github.com/node-cron/node-cron/issues/440
       clipboardFilesWatcher = cron.schedule(
         "*/2 * * * * *", // every 2 seconds
         async () => {
@@ -629,7 +628,6 @@ async function initialize(fromSuspension = false): Promise<void> {
       });
     }
 
-    // @ts-expect-error https://github.com/node-cron/node-cron/issues/440
     keepAliveTask = cron.schedule(
       // every 4 minutes
       "*/4 * * * *",
@@ -649,14 +647,12 @@ async function initialize(fromSuspension = false): Promise<void> {
 
   if (!fromSuspension) {
     if (config.get("autoCleanup", true)) {
-      // @ts-expect-error https://github.com/node-cron/node-cron/issues/440
       filesCleanerTask = cron.schedule("*/1 * * * *", async () => {
         await cleanFiles(syncFolder);
       });
       filesCleanerTask.execute();
     }
 
-    // @ts-expect-error https://github.com/node-cron/node-cron/issues/440
     idleDetectorTask = cron.schedule(
       "* * * * * *", // every second
       async () => {
