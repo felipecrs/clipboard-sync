@@ -4,6 +4,14 @@ import path from "node:path";
 import { setTimeout as setTimeoutAsync } from "node:timers/promises";
 
 import {
+  FSWatcher as ChokidarFSWatcher,
+  watch as chokidarWatch,
+} from "chokidar";
+import {
+  readClipboardFilePaths,
+  writeClipboardFilePaths,
+} from "clip-filepaths";
+import {
   Menu,
   Notification,
   Tray,
@@ -17,11 +25,6 @@ import {
 import log from "electron-log";
 import Store from "electron-store";
 import { execa } from "execa";
-
-import {
-  FSWatcher as ChokidarFSWatcher,
-  watch as chokidarWatch,
-} from "chokidar";
 import cron from "node-cron";
 import {
   gt as semverGreaterThan,
@@ -76,14 +79,6 @@ log.eventLogger.startLogging();
 if (process.platform === "darwin") {
   // This is just during development, because LSUIElement=1 already handles this on the packaged application
   app.dock.hide();
-}
-
-// @ts-ignore: clipboard-event is an optional dependency
-let clipboardEx: typeof import("electron-clipboard-ex") | undefined;
-
-if (process.platform !== "linux") {
-  // eslint-disable-next-line unicorn/prefer-module
-  clipboardEx = require("electron-clipboard-ex");
 }
 
 type ConfigType = {
@@ -161,11 +156,11 @@ async function writeClipboardToFile(): Promise<void> {
   try {
     // macOS writes text/plain even for uri-list and image/png, so we check
     // them before checking for text/plain
-    if (clipboardFormats.includes("text/uri-list") && clipboardEx) {
+    if (clipboardFormats.includes("text/uri-list")) {
       if (!config.get("sendFiles", true)) {
         return;
       }
-      clipboardFilePaths = clipboardEx.readFilePaths();
+      clipboardFilePaths = readClipboardFilePaths().filePaths;
       clipboardType = "files";
     } else if (clipboardFormats.includes("image/png")) {
       if (!config.get("sendImages", true)) {
@@ -381,8 +376,8 @@ async function readClipboardFromFile(
   try {
     // macOS writes text/plain even for uri-list and image/png, so we check
     // them before checking for text/plain
-    if (clipboardFormats.includes("text/uri-list") && clipboardEx) {
-      currentFilePaths = clipboardEx.readFilePaths();
+    if (clipboardFormats.includes("text/uri-list")) {
+      currentFilePaths = readClipboardFilePaths().filePaths;
       currentClipboardType = "files";
     } else if (clipboardFormats.includes("image/png")) {
       currentImage = clipboard.readImage().toPNG();
@@ -444,15 +439,23 @@ async function readClipboardFromFile(
     return;
   }
 
-  if (fileClipboardType === "text") {
-    clipboard.write(newText);
-    lastTextRead = newText;
-  } else if (fileClipboardType === "image") {
-    clipboard.writeImage(nativeImage.createFromBuffer(newImage));
-    lastImageSha256Read = newImageSha256;
-  } else if (fileClipboardType === "files" && clipboardEx) {
-    clipboardEx.writeFilePaths(newFilePaths);
-    lastClipboardFilePathsRead = newFilePaths;
+  switch (fileClipboardType) {
+    case "text": {
+      clipboard.write(newText);
+      lastTextRead = newText;
+      break;
+    }
+    case "image": {
+      clipboard.writeImage(nativeImage.createFromBuffer(newImage));
+      lastImageSha256Read = newImageSha256;
+      break;
+    }
+    case "files": {
+      writeClipboardFilePaths(newFilePaths);
+      lastClipboardFilePathsRead = newFilePaths;
+      break;
+    }
+    // No default
   }
   log.info(`Clipboard was read from ${file}`);
   lastTimeRead = currentTime;
@@ -910,7 +913,6 @@ function setContextMenu(): void {
           checked: config.get("sendFiles"),
           click: (checkBox): void => handleCheckBoxClick(checkBox, "sendFiles"),
           toolTip: "Whether to enable sending copied files or not",
-          visible: !!clipboardEx,
         },
       ],
     },
@@ -942,7 +944,6 @@ function setContextMenu(): void {
           click: (checkBox): void =>
             handleCheckBoxClick(checkBox, "receiveFiles"),
           toolTip: "Whether to enable receiving files or not",
-          visible: !!clipboardEx,
         },
       ],
     },
