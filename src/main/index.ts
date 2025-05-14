@@ -82,8 +82,9 @@ if (process.platform === "darwin") {
 let clipboardEx: typeof import("electron-clipboard-ex") | undefined;
 
 if (process.platform !== "linux") {
-  // eslint-disable-next-line unicorn/prefer-module
-  clipboardEx = require("electron-clipboard-ex");
+  // @ts-ignore: clipboard-event is an optional dependency
+  const { default: clipboardExModule } = await import("electron-clipboard-ex");
+  clipboardEx = clipboardExModule;
 }
 
 type ConfigType = {
