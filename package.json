@@ -45,7 +45,7 @@
     "@types/semver": "^7.7.0",
     "electron": "^34.5.6",
     "electron-vite": "^3.1.0",
-    "eslint": "^9.26.0",
+    "eslint": "^9.27.0",
     "eslint-plugin-unicorn": "^59.0.1",
     "execa": "^9.5.3",
     "neostandard": "^0.12.1",
