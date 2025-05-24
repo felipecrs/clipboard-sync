@@ -1,6 +1,10 @@
-<img align="left" width="100" height="100" src="./resources/appicons/png/icon.png">
+<p align="center">
+⭐<b>Please star this project in GitHub if it helps you!</b>⭐
+</p>
 
 # Clipboard Sync
+
+<img align="right" width="100" height="100" src="./resources/appicons/png/icon.png">
 
 A simple tool which helps to sync the clipboard between computers by using a shared folder.
 
@@ -8,7 +12,7 @@ In other words, if you have a shared folder between your computers (including On
 
 Currently supports the following formats in the clipboard:
 
-- `text`
+- `text` (including hyperlinks and rich text)
 - `image`
 - `files` (max of 100MB)
 
