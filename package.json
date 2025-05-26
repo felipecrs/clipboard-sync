@@ -47,7 +47,7 @@
     "electron-vite": "^3.1.0",
     "eslint": "^9.27.0",
     "eslint-plugin-unicorn": "^59.0.1",
-    "execa": "^9.5.3",
+    "execa": "^9.6.0",
     "neostandard": "^0.12.1",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
