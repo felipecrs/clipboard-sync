@@ -27,7 +27,7 @@
     "chokidar": "^4.0.3",
     "clip-filepaths": "^0.2.0",
     "clipboard-event": "^1.6.0",
-    "electron-log": "^5.4.0",
+    "electron-log": "^5.4.1",
     "electron-squirrel-startup": "^1.0.1",
     "electron-store": "^10.0.1",
     "follow-redirects": "^1.15.9",
