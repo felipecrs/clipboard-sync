@@ -504,17 +504,21 @@ async function initialize(fromSuspension = false): Promise<void> {
     return;
   }
 
-  try {
-    const stat = await fs.lstat(syncFolder);
-    if (!syncFolder || !stat.isDirectory()) {
-      askForFolder();
+  if (syncFolder) {
+    try {
+      const stat = await fs.lstat(syncFolder);
+      if (!stat.isDirectory()) {
+        askForFolder();
+      }
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        askForFolder();
+      } else {
+        throw error;
+      }
     }
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      askForFolder();
-    } else {
-      throw error;
-    }
+  } else {
+    askForFolder();
   }
 
   try {
@@ -1009,7 +1013,12 @@ function setContextMenu(): void {
       click: restartOneDrive,
     },
     { type: "separator" },
-    { label: updateLabel, type: "normal", click: checkForUpdatesPress },
+    {
+      label: updateLabel,
+      type: "normal",
+      visible: process.platform !== "linux",
+      click: checkForUpdatesPress,
+    },
     {
       label: "GitHub",
       type: "normal",
@@ -1054,7 +1063,9 @@ async function createAppIcon(): Promise<void> {
 
   await initialize();
 
-  await autoCheckForUpdates();
+  if (process.platform !== "linux") {
+    await autoCheckForUpdates();
+  }
 }
 
 // This method will be called when Electron has finished
