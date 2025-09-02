@@ -38,10 +38,8 @@ import {
   ClipboardType,
   ParsedClipboardFileName,
   cleanFiles,
-  getNextFileNumber,
   isClipboardTextEmpty,
   isClipboardTextEquals,
-  isThereMoreThanOneClipboardFile,
   noComputersReceiving,
   parseClipboardFileName,
 } from "./clipboard.js";
@@ -112,16 +110,14 @@ let appIcon: Tray;
 
 let syncFolder: string;
 
+let lastBeat: number;
+
 let lastTextRead: ClipboardText;
 let lastImageSha256Read: string;
 let lastClipboardFilePathsRead: string[];
-let lastTimeRead: number;
-let lastFileNumberReadFound: number;
 
 let lastTextWritten: ClipboardText;
 let lastImageSha256Written: string;
-let lastTimeWritten: number;
-let lastFileNumberWritten: number;
 
 let initialized: boolean = false;
 let initializingOrUnInitializing: boolean = false;
@@ -132,13 +128,13 @@ let filesCleanerTask: cron.ScheduledTask;
 let idleDetectorTask: cron.ScheduledTask;
 let iconWaiter: NodeJS.Timeout;
 
-let lastTimeClipboardChecked: number;
+let lastClipboardEvent: number;
 
 async function writeClipboardToFile(): Promise<void> {
-  const currentTime = Date.now();
+  const beat = Date.now();
 
   // Avoids sending the clipboard if there is no other computer receiving
-  if (await noComputersReceiving(syncFolder, currentTime)) {
+  if (await noComputersReceiving(syncFolder, beat)) {
     log.info(
       "No other computer is receiving clipboards. Skipping clipboard send...",
     );
@@ -200,51 +196,65 @@ async function writeClipboardToFile(): Promise<void> {
   }
 
   // Prevent sending the clipboard that was just received, or resend the same clipboard too quickly
-  if (
-    clipboardType === "text" &&
-    (isClipboardTextEmpty(clipboardText) ||
-      (lastTimeRead &&
-        currentTime - lastTimeRead < 5000 &&
-        isClipboardTextEquals(lastTextRead, clipboardText)) ||
-      (lastTimeWritten &&
-        currentTime - lastTimeWritten < 10_000 &&
-        isClipboardTextEquals(lastTextWritten, clipboardText)))
-  ) {
-    return;
+  const recent = lastBeat && beat - lastBeat < 15_000;
+
+  switch (clipboardType) {
+    case "text": {
+      if (isClipboardTextEmpty(clipboardText)) {
+        return;
+      }
+      if (
+        recent &&
+        (isClipboardTextEquals(lastTextRead, clipboardText) ||
+          isClipboardTextEquals(lastTextWritten, clipboardText))
+      ) {
+        return;
+      }
+
+      break;
+    }
+    case "image": {
+      if (!clipboardImage) {
+        return;
+      }
+      if (
+        recent &&
+        (lastImageSha256Read === clipboardImageSha256 ||
+          lastImageSha256Written === clipboardImageSha256)
+      ) {
+        return;
+      }
+
+      break;
+    }
+    case "files": {
+      if (!clipboardFilePaths) {
+        return;
+      }
+      if (
+        recent &&
+        isArrayEquals(lastClipboardFilePathsRead, clipboardFilePaths)
+      ) {
+        return;
+      }
+      const size = await getFilesSizeInMb(clipboardFilePaths);
+      if (size > 100) {
+        log.warn(
+          `Not sending cliboard files as ${size}MB is bigger than 100MB`,
+        );
+        return;
+      }
+
+      break;
+    }
   }
 
-  if (
-    clipboardType === "image" &&
-    (!clipboardImage ||
-      (lastTimeRead &&
-        currentTime - lastTimeRead < 5000 &&
-        lastImageSha256Read === clipboardImageSha256) ||
-      (lastTimeWritten &&
-        currentTime - lastTimeWritten < 10_000 &&
-        lastImageSha256Written === clipboardImageSha256))
-  ) {
-    return;
-  }
+  lastBeat = beat;
 
-  if (
-    clipboardType === "files" &&
-    (!clipboardFilePaths ||
-      (lastTimeRead &&
-        currentTime - lastTimeRead < 5000 &&
-        isArrayEquals(lastClipboardFilePathsRead, clipboardFilePaths)) ||
-      (await getFilesSizeInMb(clipboardFilePaths)) > 100)
-  ) {
-    return;
-  }
-
-  const fileNumber = await getNextFileNumber(syncFolder);
   let destinationPath: string;
   switch (clipboardType) {
     case "text": {
-      destinationPath = path.join(
-        syncFolder,
-        `${fileNumber}-${hostName}.text.json`,
-      );
+      destinationPath = path.join(syncFolder, `${beat}-${hostName}.text.json`);
       await fs.writeFile(
         destinationPath,
         JSON.stringify(clipboardText, undefined, 2),
@@ -255,7 +265,7 @@ async function writeClipboardToFile(): Promise<void> {
       break;
     }
     case "image": {
-      destinationPath = path.join(syncFolder, `${fileNumber}-${hostName}.png`);
+      destinationPath = path.join(syncFolder, `${beat}-${hostName}.png`);
       await fs.writeFile(destinationPath, clipboardImage);
       lastImageSha256Written = clipboardImageSha256;
 
@@ -265,7 +275,7 @@ async function writeClipboardToFile(): Promise<void> {
       filesCount = await getTotalNumberOfFiles(clipboardFilePaths);
       destinationPath = path.join(
         syncFolder,
-        `${fileNumber}-${hostName}.${filesCount}_files`,
+        `${beat}-${hostName}.${filesCount}_files`,
       );
       await fs.mkdir(destinationPath);
       for (const filePath of clipboardFilePaths) {
@@ -281,11 +291,8 @@ async function writeClipboardToFile(): Promise<void> {
 
       break;
     }
-    // No default
   }
   log.info(`Clipboard written to ${destinationPath}`);
-  lastTimeWritten = currentTime;
-  lastFileNumberWritten = fileNumber;
 
   setIconFor5Seconds("sent");
 }
@@ -293,10 +300,10 @@ async function writeClipboardToFile(): Promise<void> {
 async function readClipboardFromFile(
   parsedFile: ParsedClipboardFileName,
 ): Promise<void> {
-  const currentTime = Date.now();
+  const beat = Date.now();
 
   const file = parsedFile.file;
-  const currentFileNumber = parsedFile.number;
+  const fileBeat = parsedFile.beat;
   const fileClipboardType = parsedFile.clipboardType;
 
   let newText: ClipboardText;
@@ -307,7 +314,6 @@ async function readClipboardFromFile(
   try {
     switch (fileClipboardType) {
       case "text": {
-        lastFileNumberReadFound = currentFileNumber;
         if (!config.get("receiveTexts", true)) {
           return;
         }
@@ -316,7 +322,6 @@ async function readClipboardFromFile(
         break;
       }
       case "image": {
-        lastFileNumberReadFound = currentFileNumber;
         if (!config.get("receiveImages", true)) {
           return;
         }
@@ -327,7 +332,6 @@ async function readClipboardFromFile(
       }
       case "files": {
         if (!config.get("receiveFiles", true)) {
-          lastFileNumberReadFound = currentFileNumber;
           return;
         }
         newFilesCount = parsedFile.filesCount;
@@ -337,7 +341,6 @@ async function readClipboardFromFile(
           log.warn(
             `Could not read the number of files in ${file}. Skipping...`,
           );
-          lastFileNumberReadFound = currentFileNumber;
           return;
         }
 
@@ -351,7 +354,6 @@ async function readClipboardFromFile(
           return;
         }
 
-        lastFileNumberReadFound = currentFileNumber;
         const directoryMembers = await fs.readdir(file);
         newFilePaths = directoryMembers.map((fileName: string) =>
           path.join(file, fileName),
@@ -407,37 +409,44 @@ async function readClipboardFromFile(
 
   // Prevents writing duplicated stuff to clipboard
   if (currentClipboardType === fileClipboardType) {
-    if (
-      currentClipboardType === "text" &&
-      (isClipboardTextEmpty(newText) ||
-        isClipboardTextEquals(currentText, newText))
-    ) {
-      return;
-    } else if (
-      fileClipboardType === "image" &&
-      (!newImage || currentImageSha256 === newImageSha256)
-    ) {
-      return;
-    } else if (
-      fileClipboardType === "files" &&
-      (!newFilePaths || isArrayEquals(currentFilePaths, newFilePaths))
-    ) {
-      return;
+    switch (currentClipboardType) {
+      case "text": {
+        if (
+          isClipboardTextEmpty(newText) ||
+          isClipboardTextEquals(currentText, newText)
+        ) {
+          return;
+        }
+
+        break;
+      }
+      case "image": {
+        if (!newImage || currentImageSha256 === newImageSha256) {
+          return;
+        }
+
+        break;
+      }
+      case "files": {
+        if (!newFilePaths || isArrayEquals(currentFilePaths, newFilePaths)) {
+          return;
+        }
+
+        break;
+      }
     }
   }
 
-  // Skips the read if a newer clipboard was already sent, which can happen if
-  // OneDrive takes too long to sync
-  if (
-    (await isThereMoreThanOneClipboardFile(syncFolder, "from-myself")) &&
-    lastFileNumberWritten &&
-    currentFileNumber < lastFileNumberWritten
-  ) {
+  // Skips the read if a newer clipboard was already processed, which can
+  // happen if OneDrive takes too long to sync
+  if (lastBeat && fileBeat < lastBeat) {
     log.info(
-      `Skipping reading clipboard from ${file} as a newer clipboard was already sent`,
+      `Skipping reading clipboard from ${file} as a newer clipboard was already processed`,
     );
     return;
   }
+
+  lastBeat = beat;
 
   switch (fileClipboardType) {
     case "text": {
@@ -455,10 +464,8 @@ async function readClipboardFromFile(
       lastClipboardFilePathsRead = newFilePaths;
       break;
     }
-    // No default
   }
   log.info(`Clipboard was read from ${file}`);
-  lastTimeRead = currentTime;
 
   setIconFor5Seconds("received");
 }
@@ -541,14 +548,11 @@ async function initialize(fromSuspension = false): Promise<void> {
     clipboardListener.startListening();
     clipboardListener.on("change", async () => {
       // Prevents duplicated clipboard events
-      const currentTime = Date.now();
-      if (
-        lastTimeClipboardChecked &&
-        currentTime - lastTimeClipboardChecked < 500
-      ) {
+      const now = Date.now();
+      if (lastClipboardEvent && now - lastClipboardEvent < 500) {
         return;
       }
-      lastTimeClipboardChecked = currentTime;
+      lastClipboardEvent = now;
 
       // Wait a bit so that clipboard is fully written
       await setTimeoutAsync(100);
@@ -569,6 +573,7 @@ async function initialize(fromSuspension = false): Promise<void> {
       clipboardFilesWatcher = cron.schedule(
         "*/2 * * * * *", // every 2 seconds
         async () => {
+          const beat = Date.now();
           const files = await fs.readdir(syncFolder);
           const clipboardFiles: ParsedClipboardFileName[] = [];
           for (const file of files) {
@@ -582,29 +587,25 @@ async function initialize(fromSuspension = false): Promise<void> {
             }
           }
 
-          // Read the most recent clipboard file
-          if (clipboardFiles.length > 0) {
-            clipboardFiles.sort((a, b) => b.number - a.number);
-
-            const file = clipboardFiles[0];
-
-            // Avoids reading existing files when first starting
-            if (lastFileNumberReadFound === undefined) {
-              lastFileNumberReadFound = file.number;
-            }
-
-            // Keeping this logic here instead of inside readClipboardFromFile
-            // since this situation can only happen in this watching mode
-            if (
-              clipboardFiles.length > 1 &&
-              lastFileNumberReadFound &&
-              file.number <= lastFileNumberReadFound
-            ) {
-              return;
-            }
-
-            await readClipboardFromFile(file);
+          // Only process the most recent clipboard file
+          clipboardFiles.sort((a, b) => a.beat - b.beat);
+          const file = clipboardFiles.pop();
+          if (!file) {
+            return;
           }
+
+          // Avoids reading existing files when first starting
+          if (beat - file.beat > 15_000) {
+            return;
+          }
+
+          // Keeping this logic here instead of inside readClipboardFromFile
+          // since this situation can only happen in this watching mode
+          if (lastBeat && file.beat <= lastBeat) {
+            return;
+          }
+
+          await readClipboardFromFile(file);
         },
       );
     } else {

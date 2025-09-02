@@ -30,7 +30,7 @@ export type ClipboardType = "text" | "image" | "files";
 
 export type ParsedClipboardFileName = {
   file: string;
-  number: number;
+  beat: number;
   clipboardType: ClipboardType;
   from: "myself" | "others";
   filesCount?: number;
@@ -43,7 +43,7 @@ export const parseClipboardFileName = (
   syncFolder: string,
   filter: "none" | "from-others" | "from-myself" = "none",
 ): ParsedClipboardFileName | undefined => {
-  let number = 0;
+  let beat = 0;
   let clipboardType: ClipboardType;
   let from: "myself" | "others";
   let filesCount: number | undefined;
@@ -69,66 +69,35 @@ export const parseClipboardFileName = (
     switch (filter) {
       case "from-myself": {
         if (from === "myself") {
-          number = Number.parseInt(match[1]);
+          beat = Number.parseInt(match[1]);
         }
         break;
       }
       case "from-others": {
         if (from === "others") {
-          number = Number.parseInt(match[1]);
+          beat = Number.parseInt(match[1]);
         }
         break;
       }
       default: {
-        number = Number.parseInt(match[1]);
+        beat = Number.parseInt(match[1]);
         break;
       }
     }
   }
 
-  if (number === 0) {
+  if (beat === 0) {
     return undefined;
   }
 
   return {
     file: path.join(syncFolder, baseFile),
-    number,
+    beat,
     clipboardType,
     from,
     filesCount,
   };
 };
-
-export async function getNextFileNumber(syncFolder: string): Promise<number> {
-  const numbers: number[] = [];
-  const files = await fs.readdir(syncFolder);
-  for (const file of files) {
-    const filePath = path.join(syncFolder, file);
-    const parsedFile = parseClipboardFileName(filePath, syncFolder);
-    if (parsedFile) {
-      numbers.push(parsedFile.number);
-    }
-  }
-  if (numbers.length > 0) {
-    return Math.max(...numbers) + 1;
-  }
-  return 1;
-}
-
-export async function isThereMoreThanOneClipboardFile(
-  syncFolder: string,
-  filter: "none" | "from-others" | "from-myself" = "none",
-): Promise<boolean> {
-  const files = await fs.readdir(syncFolder);
-  for (const file of files) {
-    if (
-      parseClipboardFileName(path.join(syncFolder, file), syncFolder, filter)
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
 
 export function isIsReceivingFile(file: string): boolean {
   return file.endsWith(isReceivingFileNameSuffix);
@@ -136,7 +105,7 @@ export function isIsReceivingFile(file: string): boolean {
 
 export async function noComputersReceiving(
   syncFolder: string,
-  currentTime: number,
+  now: number,
 ): Promise<boolean> {
   const directoryMembers = await fs.readdir(syncFolder);
   const computersReceiving = directoryMembers.filter(
@@ -145,10 +114,10 @@ export async function noComputersReceiving(
 
   // This file will be renewed on every 4 minutes, this will conside stale
   // any files older than 10 minutes
-  const tenMinutesAgo = new Date(currentTime - 600_000);
+  const tenMinutesAgo = now - 600_000;
   for (const computerReceiving of computersReceiving) {
     const fileStat = await fs.stat(path.join(syncFolder, computerReceiving));
-    if (fileStat.mtime >= tenMinutesAgo) {
+    if (fileStat.ctimeMs >= tenMinutesAgo) {
       return false;
     }
   }
@@ -203,7 +172,7 @@ export async function cleanFiles(syncFolder: string): Promise<void> {
       throw error;
     }
 
-    if (fileStat.ctime.getTime() <= timeThreshold) {
+    if (fileStat.ctimeMs <= timeThreshold) {
       log.info(`Deleting: ${filePath}`);
       await deleteFileOrFolderRecursively(filePath);
       continue;
@@ -213,7 +182,7 @@ export async function cleanFiles(syncFolder: string): Promise<void> {
     if (
       process.platform === "win32" &&
       parsedFile.from === "others" &&
-      fileStat.ctime.getTime() <= now - 60_000
+      fileStat.ctimeMs <= now - 60_000
     ) {
       await unsyncFileOrFolderRecursively(filePath);
     }
@@ -272,6 +241,9 @@ export function isClipboardTextEquals(
   text1: ClipboardText,
   text2: ClipboardText,
 ): boolean {
+  if (text1 === undefined || text2 === undefined) {
+    return false;
+  }
   if (text1.text && text2.text) {
     return text1.text === text2.text;
   }
