@@ -50,7 +50,7 @@ import {
   getFilesSizeInMb,
   getRedirectedUrl,
   getTotalNumberOfFiles,
-  isArrayEquals,
+  arraysEqual,
 } from "./utilities.js";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -233,7 +233,7 @@ async function writeClipboardToFile(): Promise<void> {
       }
       if (
         recent &&
-        isArrayEquals(lastClipboardFilePathsRead, clipboardFilePaths)
+        arraysEqual(lastClipboardFilePathsRead, clipboardFilePaths)
       ) {
         return;
       }
@@ -428,7 +428,7 @@ async function readClipboardFromFile(
         break;
       }
       case "files": {
-        if (!newFilePaths || isArrayEquals(currentFilePaths, newFilePaths)) {
+        if (!newFilePaths || arraysEqual(currentFilePaths, newFilePaths)) {
           return;
         }
 
