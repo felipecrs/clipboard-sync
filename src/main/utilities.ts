@@ -8,13 +8,19 @@ import log from "electron-log";
 
 import followRedirects from "follow-redirects";
 
-export function isArrayEquals(array1?: unknown[], array2?: unknown[]): boolean {
-  if (array1 && array2 && array1.length === array2.length) {
-    array1 = array1.sort();
-    array2 = array2.sort();
-    return array1.every((u: unknown, index: number) => u === array2[index]);
+export function arraysEqual(a: unknown[], b: unknown[]): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  if (a === undefined || b === undefined) return false;
+  if (a.length !== b.length) return false;
+
+  a = a.toSorted();
+  b = b.toSorted();
+
+  for (const [index, element] of a.entries()) {
+    if (element !== b[index]) return false;
   }
-  return false;
+  return true;
 }
 
 export async function iterateThroughFilesRecursively(
