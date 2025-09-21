@@ -40,7 +40,7 @@
     "@electron-forge/maker-dmg": "^7.9.0",
     "@electron-forge/maker-flatpak": "^7.9.0",
     "@electron-forge/maker-squirrel": "^7.9.0",
-    "@electron-toolkit/tsconfig": "^1.0.1",
+    "@electron-toolkit/tsconfig": "^2.0.0",
     "@types/electron-squirrel-startup": "^1.0.2",
     "@types/follow-redirects": "^1.14.4",
     "@types/semver": "^7.7.1",
