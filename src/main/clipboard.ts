@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
+import fswin from "fswin";
 import log from "electron-log";
 
 import {
@@ -13,18 +14,6 @@ import {
   deleteFileOrFolderRecursively,
   iterateThroughFilesRecursively,
 } from "./utilities.js";
-
-import type {
-  Attributes as FSWinAttributes,
-  SetAttributes as FSWinSetAttributes,
-} from "fswin";
-
-let fswin: typeof import("fswin") | undefined;
-
-if (process.platform === "win32") {
-  const { default: fswinModule } = await import("fswin");
-  fswin = fswinModule;
-}
 
 export type ClipboardType = "text" | "image" | "files";
 
@@ -191,7 +180,7 @@ export async function cleanFiles(syncFolder: string): Promise<void> {
 
 function getAttributesWrapper(
   path: string,
-  callback: (argument0: Error, argument1: FSWinAttributes) => void,
+  callback: (argument0: Error, argument1: fswin.Attributes) => void,
 ): void {
   fswin.getAttributes(path, function (succeeded) {
     succeeded
@@ -202,7 +191,7 @@ function getAttributesWrapper(
 
 function setAttributesWrapper(
   path: string,
-  attributes: FSWinSetAttributes,
+  attributes: fswin.SetAttributes,
   callback: (argument0: Error, argument1: undefined) => void,
 ): void {
   fswin.setAttributes(path, attributes, function (succeeded) {
