@@ -1,6 +1,5 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 
 import fswin from "fswin";
 import log from "electron-log";
@@ -178,44 +177,24 @@ export async function cleanFiles(syncFolder: string): Promise<void> {
   }
 }
 
-function getAttributesWrapper(
-  path: string,
-  callback: (argument0: Error, argument1: fswin.Attributes) => void,
-): void {
-  fswin.getAttributes(path, function (succeeded) {
-    succeeded
-      ? callback(undefined, succeeded)
-      : callback(new Error(`Failed to set attributes of ${path}`), undefined);
-  });
-}
-
-function setAttributesWrapper(
-  path: string,
-  attributes: fswin.SetAttributes,
-  callback: (argument0: Error, argument1: undefined) => void,
-): void {
-  fswin.setAttributes(path, attributes, function (succeeded) {
-    succeeded
-      ? callback(undefined, undefined)
-      : callback(new Error(`Failed to set attributes of ${path}`), undefined);
-  });
-}
-
 export async function unsyncFileOrFolderRecursively(
   fileOrFolder: string,
 ): Promise<void> {
-  const getAttributesAsync = promisify(getAttributesWrapper);
-  const setAttributesAsync = promisify(setAttributesWrapper);
-
   await iterateThroughFilesRecursively([fileOrFolder], async (file) => {
     // Only unsync file if it has IS_REPARSE_POINT attribute
-    const attributes = await getAttributesAsync(file);
+    const attributes = await fswin.getAttributesAsync(file);
+    if (attributes === null) {
+      throw new Error(`Failed to get attributes for file: ${file}`);
+    }
     if (attributes.IS_REPARSE_POINT) {
       log.info(`Unsyncing: ${file}`);
-      await setAttributesAsync(file, {
+      const succeeded = await fswin.setAttributesAsync(file, {
         IS_UNPINNED: true,
         IS_PINNED: false,
       });
+      if (!succeeded) {
+        throw new Error(`Failed to set attributes for file: ${file}`);
+      }
     }
   });
 }
