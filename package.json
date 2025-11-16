@@ -44,7 +44,7 @@
     "@types/electron-squirrel-startup": "^1.0.2",
     "@types/follow-redirects": "^1.14.4",
     "@types/semver": "^7.7.1",
-    "electron": "^39.2.0",
+    "electron": "^39.2.1",
     "electron-vite": "^4.0.1",
     "eslint": "^9.39.1",
     "eslint-plugin-unicorn": "^62.0.0",
