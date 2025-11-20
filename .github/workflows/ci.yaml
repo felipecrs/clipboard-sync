@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
     runs-on: "${{ matrix.os }}-latest"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: volta-cli/action@v4
       # https://github.com/actions/runner/issues/2958#issuecomment-2186602747
       - if: matrix.os == 'macos'
@@ -43,7 +43,7 @@ jobs:
       fail-fast: false
     runs-on: "${{ matrix.os }}-latest"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: volta-cli/action@v4
       # https://github.com/actions/runner/issues/2958#issuecomment-2186602747
       - if: matrix.os == 'macos'
