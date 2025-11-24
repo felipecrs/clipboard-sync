@@ -3,6 +3,10 @@
   "extends": ["config:recommended"],
   "dependencyDashboard": true,
   "rangeStrategy": "bump",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true
+  },
   "packageRules": [
     {
       "description": "Automerge non-major dev updates",
