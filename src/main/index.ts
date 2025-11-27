@@ -55,9 +55,8 @@ import {
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 {
-  const { default: squirrelStartup } = await import(
-    "electron-squirrel-startup"
-  );
+  const { default: squirrelStartup } =
+    await import("electron-squirrel-startup");
   if (squirrelStartup) {
     console.error("Squirrel event handled. Quitting...");
     app.exit();
