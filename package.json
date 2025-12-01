@@ -53,7 +53,7 @@
     "prettier": "^3.7.3",
     "rimraf": "^6.1.2",
     "typescript": "^5.9.3",
-    "vite": "^7.2.4"
+    "vite": "^7.2.6"
   },
   "volta": {
     "node": "24.11.1",
