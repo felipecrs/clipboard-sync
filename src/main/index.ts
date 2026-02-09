@@ -8,9 +8,22 @@ import {
   watch as chokidarWatch,
 } from "chokidar";
 import {
-  readClipboardFilePaths,
-  writeClipboardFilePaths,
-} from "clip-filepaths";
+  availableFormats,
+  type ClipboardWatcherJs,
+  getFiles,
+  getHtml,
+  getImageBinary,
+  getRtf,
+  getText,
+  hasFiles,
+  hasHtml,
+  hasImage,
+  hasRtf,
+  hasText,
+  setFiles,
+  setImageBinary,
+  startWatch,
+} from "@crosscopy/clipboard";
 import {
   Menu,
   Notification,
@@ -18,7 +31,6 @@ import {
   app,
   clipboard,
   dialog,
-  nativeImage,
   powerMonitor,
   shell,
 } from "electron";
@@ -30,8 +42,6 @@ import {
   gt as semverGreaterThan,
   gte as semverGreaterThanOrEqual,
 } from "semver";
-
-import type { ClipboardEventListener } from "clipboard-event";
 
 import {
   ClipboardText,
@@ -120,7 +130,7 @@ let lastImageSha256Written: string;
 
 let initialized: boolean = false;
 let initializingOrUnInitializing: boolean = false;
-let clipboardListener: ClipboardEventListener;
+let clipboardWatcher: ClipboardWatcherJs;
 let clipboardFilesWatcher: ChokidarFSWatcher | cron.ScheduledTask;
 let keepAliveTask: cron.ScheduledTask;
 let filesCleanerTask: cron.ScheduledTask;
@@ -146,41 +156,36 @@ async function writeClipboardToFile(): Promise<void> {
   let clipboardImageSha256: string;
   let clipboardFilePaths: string[];
   let filesCount: number;
-  const clipboardFormats = clipboard.availableFormats();
 
   try {
     // macOS writes text/plain even for uri-list and image/png, so we check
     // them before checking for text/plain
-    if (clipboardFormats.includes("text/uri-list")) {
+    if (hasFiles()) {
       if (!config.get("sendFiles", true)) {
         return;
       }
-      clipboardFilePaths = readClipboardFilePaths().filePaths;
+      clipboardFilePaths = await getFiles();
       clipboardType = "files";
-    } else if (clipboardFormats.includes("image/png")) {
+    } else if (hasImage()) {
       if (!config.get("sendImages", true)) {
         return;
       }
-      clipboardImage = clipboard.readImage().toPNG();
+      clipboardImage = Buffer.from(await getImageBinary());
       clipboardImageSha256 = calculateSha256(clipboardImage);
       clipboardType = "image";
-    } else if (
-      clipboardFormats.includes("text/plain") ||
-      clipboardFormats.includes("text/html") ||
-      clipboardFormats.includes("text/rtf")
-    ) {
+    } else if (hasText() || hasHtml() || hasRtf()) {
       if (!config.get("sendTexts", true)) {
         return;
       }
       clipboardText = {};
-      if (clipboardFormats.includes("text/plain")) {
-        clipboardText.text = clipboard.readText() ?? undefined;
+      if (hasText()) {
+        clipboardText.text = await getText();
       }
-      if (clipboardFormats.includes("text/html")) {
-        clipboardText.html = clipboard.readHTML() ?? undefined;
+      if (hasHtml()) {
+        clipboardText.html = await getHtml();
       }
-      if (clipboardFormats.includes("text/rtf")) {
-        clipboardText.rtf = clipboard.readRTF() ?? undefined;
+      if (hasRtf()) {
+        clipboardText.rtf = await getRtf();
       }
       clipboardType = "text";
     }
@@ -190,7 +195,7 @@ async function writeClipboardToFile(): Promise<void> {
   }
 
   if (!clipboardType) {
-    log.warn(`Unknown clipboard format: ${clipboardFormats}`);
+    log.warn(`Unknown clipboard format: ${availableFormats().join(", ")}`);
     return;
   }
 
@@ -373,31 +378,26 @@ async function readClipboardFromFile(
   let currentImageSha256: string;
   let currentFilePaths: string[];
 
-  const clipboardFormats = clipboard.availableFormats();
   try {
     // macOS writes text/plain even for uri-list and image/png, so we check
     // them before checking for text/plain
-    if (clipboardFormats.includes("text/uri-list")) {
-      currentFilePaths = readClipboardFilePaths().filePaths;
+    if (hasFiles()) {
+      currentFilePaths = await getFiles();
       currentClipboardType = "files";
-    } else if (clipboardFormats.includes("image/png")) {
-      currentImage = clipboard.readImage().toPNG();
+    } else if (hasImage()) {
+      currentImage = Buffer.from(await getImageBinary());
       currentImageSha256 = calculateSha256(currentImage);
       currentClipboardType = "image";
-    } else if (
-      clipboardFormats.includes("text/plain") ||
-      clipboardFormats.includes("text/html") ||
-      clipboardFormats.includes("text/rtf")
-    ) {
+    } else if (hasText() || hasHtml() || hasRtf()) {
       currentText = {};
-      if (clipboardFormats.includes("text/plain")) {
-        currentText.text = clipboard.readText() ?? undefined;
+      if (hasText()) {
+        currentText.text = await getText();
       }
-      if (clipboardFormats.includes("text/html")) {
-        currentText.html = clipboard.readHTML() ?? undefined;
+      if (hasHtml()) {
+        currentText.html = await getHtml();
       }
-      if (clipboardFormats.includes("text/rtf")) {
-        currentText.rtf = clipboard.readRTF() ?? undefined;
+      if (hasRtf()) {
+        currentText.rtf = await getRtf();
       }
       currentClipboardType = "text";
     }
@@ -449,17 +449,18 @@ async function readClipboardFromFile(
 
   switch (fileClipboardType) {
     case "text": {
+      // https://github.com/CrossCopy/clipboard/issues/10
       clipboard.write(newText);
       lastTextRead = newText;
       break;
     }
     case "image": {
-      clipboard.writeImage(nativeImage.createFromBuffer(newImage));
+      await setImageBinary([...newImage]);
       lastImageSha256Read = newImageSha256;
       break;
     }
     case "files": {
-      writeClipboardFilePaths(newFilePaths);
+      await setFiles(newFilePaths);
       lastClipboardFilePathsRead = newFilePaths;
       break;
     }
@@ -542,10 +543,7 @@ async function initialize(fromSuspension = false): Promise<void> {
     config.get("sendImages", true) ||
     config.get("sendFiles", true)
   ) {
-    const { default: clipboardEvent } = await import("clipboard-event");
-    clipboardListener = clipboardEvent;
-    clipboardListener.startListening();
-    clipboardListener.on("change", async () => {
+    clipboardWatcher = startWatch(async () => {
       // Prevents duplicated clipboard events
       const now = Date.now();
       if (lastClipboardEvent && now - lastClipboardEvent < 500) {
@@ -713,9 +711,9 @@ async function unInitialize(fromSuspension = false): Promise<void> {
     }
   }
 
-  if (clipboardListener) {
-    clipboardListener.stopListening();
-    clipboardListener = undefined;
+  if (clipboardWatcher) {
+    clipboardWatcher.stop();
+    clipboardWatcher = undefined;
   }
 
   if (clipboardFilesWatcher) {
