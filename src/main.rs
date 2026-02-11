@@ -260,7 +260,7 @@ fn main() {
 
     event_loop.run(move |event, _, control_flow| {
         // Use WaitUntil with a 1-second interval for timer-based tasks
-        *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_secs(1));
+        *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_secs(TIMER_TICK_INTERVAL_SECS));
 
         match event {
             Event::NewEvents(tao::event::StartCause::Init) => {
@@ -419,7 +419,7 @@ fn start_fs_watcher(
     };
 
     let watcher: Option<Box<dyn Watcher + Send>> = if *watch_mode == WatchMode::Polling {
-        let config = notify::Config::default().with_poll_interval(Duration::from_secs(1));
+        let config = notify::Config::default().with_poll_interval(Duration::from_secs(FS_WATCHER_POLL_INTERVAL_SECS));
         match notify::PollWatcher::new(event_handler, config) {
             Ok(mut w) => {
                 if let Err(e) = w.watch(sync_folder, RecursiveMode::NonRecursive) {

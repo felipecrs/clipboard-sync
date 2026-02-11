@@ -40,7 +40,13 @@ pub const CLIPBOARD_WRITE_DELAY_MS: u64 = 100;
 pub const DUPLICATE_WINDOW_MS: u64 = 15_000;
 
 /// Idle timeout in seconds (15 minutes).
-pub const IDLE_TIMEOUT_SECS: u64 = 30;
+pub const IDLE_TIMEOUT_SECS: u64 = 15 * 60;
 
 /// Max time to wait for sync folder after starting sync command (seconds).
 pub const SYNC_COMMAND_WAIT_SECS: u64 = 15;
+
+/// Interval for periodic timer-based tasks (seconds).
+pub const TIMER_TICK_INTERVAL_SECS: u64 = 1;
+
+/// Polling interval for file system watcher in polling mode (seconds).
+pub const FS_WATCHER_POLL_INTERVAL_SECS: u64 = 1;
