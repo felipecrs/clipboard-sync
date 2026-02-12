@@ -10,6 +10,7 @@ use std::path::PathBuf;
 pub enum WatchMode {
     Native,
     Polling,
+    PollingHarder,
 }
 
 impl Default for WatchMode {

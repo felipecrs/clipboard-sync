@@ -382,7 +382,9 @@ fn initialize(
         log::info!("Starting file watcher...");
         log::info!("Watch mode: {:?}", watch_mode);
 
-        start_fs_watcher(state, proxy, &sync_folder, &watch_mode);
+        if watch_mode != WatchMode::PollingHarder {
+            start_fs_watcher(state, proxy, &sync_folder, &watch_mode);
+        }
 
         // Write the initial keep-alive file
         log::info!("Writing keep-alive file...");
@@ -683,8 +685,13 @@ fn handle_timer_tick(
         None => return,
     };
 
-    // Keep-alive (every 4 minutes)
     if state.config.is_receiving_anything() {
+        // PollingHarder: manually scan directory for new clipboard files every tick
+        if state.config.watch_mode == WatchMode::PollingHarder {
+            poll_harder_scan(state, &sync_folder, tray_icon_handle);
+        }
+
+        // Keep-alive (every 4 minutes)
         let should_keep_alive = state
             .last_keep_alive
             .map(|t| now.duration_since(t) >= Duration::from_secs(KEEP_ALIVE_INTERVAL_SECS))
@@ -707,6 +714,69 @@ fn handle_timer_tick(
             clean_files(&sync_folder, &state.hostname);
             state.last_clean = Some(now);
         }
+    }
+}
+
+/// PollingHarder mode: scan the sync folder for the most recent clipboard file
+/// from other machines and process it if it's new.
+fn poll_harder_scan(
+    state: &mut AppState,
+    sync_folder: &Path,
+    tray_icon_handle: &Option<tray_icon::TrayIcon>,
+) {
+    let entries = match std::fs::read_dir(sync_folder) {
+        Ok(e) => e,
+        Err(e) => {
+            log::error!("PollingHarder: Error reading sync folder: {e}");
+            return;
+        }
+    };
+
+    let now = now_ms();
+
+    // Collect all clipboard files from others
+    let mut candidates: Vec<ParsedClipboardFile> = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if let Some(parsed) = parse_clipboard_filename(
+            &path,
+            sync_folder,
+            &state.hostname,
+            Some(ClipboardOrigin::Others),
+        ) {
+            candidates.push(parsed);
+        }
+    }
+
+    // Pick the most recent one
+    candidates.sort_by_key(|f| f.beat);
+    let Some(file) = candidates.pop() else {
+        return;
+    };
+
+    // Skip files older than 15 seconds (avoids reading existing files on startup)
+    if now.saturating_sub(file.beat) > DUPLICATE_WINDOW_MS {
+        return;
+    }
+
+    // Skip already-processed beats
+    if let Some(last) = state.last_beat {
+        if file.beat <= last {
+            return;
+        }
+    }
+
+    let received = read_clipboard_from_file(
+        &file,
+        &state.config,
+        &mut state.last_beat,
+        &mut state.last_text_read,
+        &mut state.last_image_sha256_read,
+        &mut state.last_file_paths_read,
+    );
+
+    if received {
+        set_icon_for_duration(state, tray_icon_handle, TrayIconState::Received);
     }
 }
 
@@ -816,6 +886,7 @@ fn handle_menu_event(
         Some(MenuAction::ToggleReceiveFiles) => MenuAction::ToggleReceiveFiles,
         Some(MenuAction::SetWatchModeNative) => MenuAction::SetWatchModeNative,
         Some(MenuAction::SetWatchModePolling) => MenuAction::SetWatchModePolling,
+        Some(MenuAction::SetWatchModePollingHarder) => MenuAction::SetWatchModePollingHarder,
         Some(MenuAction::ToggleAutoCleanup) => MenuAction::ToggleAutoCleanup,
         Some(MenuAction::ToggleAutoStart) => MenuAction::ToggleAutoStart,
         Some(MenuAction::SetSyncCommand) => MenuAction::SetSyncCommand,
@@ -866,6 +937,11 @@ fn handle_menu_event(
         }
         MenuAction::SetWatchModePolling => {
             state.config.watch_mode = WatchMode::Polling;
+            save_config(&state.config);
+            let _ = proxy.send_event(UserEvent::Reload);
+        }
+        MenuAction::SetWatchModePollingHarder => {
+            state.config.watch_mode = WatchMode::PollingHarder;
             save_config(&state.config);
             let _ = proxy.send_event(UserEvent::Reload);
         }
