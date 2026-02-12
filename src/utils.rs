@@ -72,12 +72,15 @@ pub fn copy_folder_recursive(
 }
 
 /// Delete a file or folder recursively, logging errors.
+///
+/// Uses rmbrr's POSIX-semantics delete for files on Windows (immediate namespace
+/// removal, ignores readonly attributes). Standard library for directories.
 pub fn delete_file_or_folder(path: &std::path::Path) {
     if path.is_dir() {
         if let Err(e) = std::fs::remove_dir_all(path) {
             log::error!("Error deleting {}: {e}", path.display());
         }
-    } else if let Err(e) = std::fs::remove_file(path) {
+    } else if let Err(e) = rmbrr::winapi::delete_file(path) {
         if e.kind() != std::io::ErrorKind::NotFound {
             log::error!("Error deleting {}: {e}", path.display());
         }

@@ -482,7 +482,7 @@ fn uninitialize(
             "{}{}",
             state.hostname, IS_RECEIVING_FILE_SUFFIX
         ));
-        let _ = std::fs::remove_file(keep_alive_path);
+        let _ = rmbrr::winapi::delete_file(&keep_alive_path);
     }
 
     // Stop sync command
