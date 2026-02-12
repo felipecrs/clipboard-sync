@@ -40,7 +40,6 @@ tinyfiledialogs = "3.9"
 open = "5"
 notify-rust = "4"
 user-idle2 = "0.6"
-rmbrr = "0.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 win32job = "2"
