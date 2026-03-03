@@ -18,8 +18,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// Regex for parsing clipboard filenames.
 /// Format: `{beat}-{hostname}.{text.json|png|{count}_files}`
 static FILE_NAME_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^([1-9][0-9]*)-([0-9a-zA-Z-]+)\.((text\.json)|png|([1-9][0-9]*)_files)$")
-        .unwrap()
+    Regex::new(r"^([1-9][0-9]*)-([0-9a-zA-Z-]+)\.((text\.json)|png|([1-9][0-9]*)_files)$").unwrap()
 });
 
 /// Get current timestamp in milliseconds.
@@ -41,11 +40,7 @@ pub fn parse_clipboard_filename(
 ) -> Option<ParsedClipboardFile> {
     // Get only the first component relative to sync_folder
     let relative = file.strip_prefix(sync_folder).ok()?;
-    let base_name = relative
-        .components()
-        .next()?
-        .as_os_str()
-        .to_string_lossy();
+    let base_name = relative.components().next()?.as_os_str().to_string_lossy();
 
     let captures = FILE_NAME_REGEX.captures(&base_name)?;
 
@@ -71,10 +66,10 @@ pub fn parse_clipboard_filename(
     };
 
     // Apply filter
-    if let Some(expected) = filter {
-        if origin != expected {
-            return None;
-        }
+    if let Some(expected) = filter
+        && origin != expected
+    {
+        return None;
     }
 
     Some(ParsedClipboardFile {
@@ -103,17 +98,17 @@ pub fn no_computers_receiving(sync_folder: &Path, hostname: &str, now: u64) -> b
 
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        if is_receiving_file(&name) && name != our_file {
-            if let Ok(meta) = entry.metadata() {
-                if let Ok(ctime) = meta.modified() {
-                    let ctime_ms = ctime
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_millis() as u64;
-                    if ctime_ms >= stale_threshold {
-                        return false;
-                    }
-                }
+        if is_receiving_file(&name)
+            && name != our_file
+            && let Ok(meta) = entry.metadata()
+            && let Ok(ctime) = meta.modified()
+        {
+            let ctime_ms = ctime
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+            if ctime_ms >= stale_threshold {
+                return false;
             }
         }
     }
@@ -148,7 +143,10 @@ pub fn clean_files(sync_folder: &Path, hostname: &str) {
             let is_legacy = name.ends_with(".txt")
                 && (name.starts_with("receiving-") || name.contains(".is-reading."));
             if is_legacy {
-                log::info!("Deleting file used by previous versions: {}", path.display());
+                log::info!(
+                    "Deleting file used by previous versions: {}",
+                    path.display()
+                );
                 delete_file_or_folder(&path);
             }
             continue;
@@ -161,17 +159,17 @@ pub fn clean_files(sync_folder: &Path, hostname: &str) {
             ClipboardOrigin::Others => OTHERS_CLEAN_THRESHOLD_SECS * 1000,
         };
 
-        if let Ok(meta) = std::fs::metadata(&path) {
-            if let Ok(ctime) = meta.modified() {
-                let ctime_ms = ctime
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis() as u64;
+        if let Ok(meta) = std::fs::metadata(&path)
+            && let Ok(ctime) = meta.modified()
+        {
+            let ctime_ms = ctime
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
 
-                if ctime_ms <= now.saturating_sub(threshold_ms) {
-                    log::info!("Deleting: {}", path.display());
-                    delete_file_or_folder(&path);
-                }
+            if ctime_ms <= now.saturating_sub(threshold_ms) {
+                log::info!("Deleting: {}", path.display());
+                delete_file_or_folder(&path);
             }
         }
     }
@@ -234,21 +232,19 @@ pub fn write_clipboard_to_file(
             return false;
         }
         match ctx.get_image() {
-            Ok(img) => {
-                match img.to_png() {
-                    Ok(png_data) => {
-                        let bytes = png_data.get_bytes().to_vec();
-                        let sha = calculate_sha256(&bytes);
-                        clipboard_image_bytes = Some(bytes);
-                        clipboard_image_sha256 = Some(sha);
-                        content_type = ClipboardContentType::Image;
-                    }
-                    Err(e) => {
-                        log::error!("Error converting clipboard image to PNG: {e}");
-                        return false;
-                    }
+            Ok(img) => match img.to_png() {
+                Ok(png_data) => {
+                    let bytes = png_data.get_bytes().to_vec();
+                    let sha = calculate_sha256(&bytes);
+                    clipboard_image_bytes = Some(bytes);
+                    clipboard_image_sha256 = Some(sha);
+                    content_type = ClipboardContentType::Image;
                 }
-            }
+                Err(e) => {
+                    log::error!("Error converting clipboard image to PNG: {e}");
+                    return false;
+                }
+            },
             Err(e) => {
                 log::error!("Error reading clipboard image: {e}");
                 return false;
@@ -294,30 +290,30 @@ pub fn write_clipboard_to_file(
                 return false;
             }
             if recent {
-                if let Some(lr) = last_text_read {
-                    if lr.equals(ct) {
-                        return false;
-                    }
+                if let Some(lr) = last_text_read
+                    && lr.equals(ct)
+                {
+                    return false;
                 }
-                if let Some(lw) = last_text_written {
-                    if lw.equals(ct) {
-                        return false;
-                    }
+                if let Some(lw) = last_text_written
+                    && lw.equals(ct)
+                {
+                    return false;
                 }
             }
         }
         ClipboardContentType::Image => {
             let sha = clipboard_image_sha256.as_ref().unwrap();
             if recent {
-                if let Some(lr) = last_image_sha256_read {
-                    if lr == sha {
-                        return false;
-                    }
+                if let Some(lr) = last_image_sha256_read
+                    && lr == sha
+                {
+                    return false;
                 }
-                if let Some(lw) = last_image_sha256_written {
-                    if lw == sha {
-                        return false;
-                    }
+                if let Some(lw) = last_image_sha256_written
+                    && lw == sha
+                {
+                    return false;
                 }
             }
         }
@@ -326,15 +322,13 @@ pub fn write_clipboard_to_file(
             if files.is_empty() {
                 return false;
             }
-            if recent {
-                if let Some(lr) = last_file_paths_read {
-                    let mut a = files.clone();
-                    let mut b = lr.clone();
-                    a.sort();
-                    b.sort();
-                    if a == b {
-                        return false;
-                    }
+            if recent && let Some(lr) = last_file_paths_read {
+                let mut a = files.clone();
+                let mut b = lr.clone();
+                a.sort();
+                b.sort();
+                if a == b {
+                    return false;
                 }
             }
             // Check total size
@@ -482,7 +476,7 @@ pub fn read_clipboard_from_file(
                 }
             };
 
-            let actual_count = get_total_number_of_files(&[file.clone()]);
+            let actual_count = get_total_number_of_files(std::slice::from_ref(file));
             if actual_count != expected_count {
                 log::info!(
                     "Not all files are yet present in _files folder. Current: {actual_count}, expected: {expected_count}. Skipping..."
@@ -543,42 +537,41 @@ pub fn read_clipboard_from_file(
         }
         ClipboardContentType::Image => {
             let sha = new_image_sha256.as_ref().unwrap();
-            if ctx.has(ContentFormat::Image) {
-                if let Ok(img) = ctx.get_image() {
-                    if let Ok(png) = img.to_png() {
-                        let current_sha = calculate_sha256(png.get_bytes());
-                        if current_sha == *sha {
-                            return false;
-                        }
-                    }
+            if ctx.has(ContentFormat::Image)
+                && let Ok(img) = ctx.get_image()
+                && let Ok(png) = img.to_png()
+            {
+                let current_sha = calculate_sha256(png.get_bytes());
+                if current_sha == *sha {
+                    return false;
                 }
             }
         }
         ClipboardContentType::Files => {
             let nf = new_file_paths.as_ref().unwrap();
-            if ctx.has(ContentFormat::Files) {
-                if let Ok(current_files) = ctx.get_files() {
-                    let mut a = nf.clone();
-                    let mut b = current_files;
-                    a.sort();
-                    b.sort();
-                    if a == b {
-                        return false;
-                    }
+            if ctx.has(ContentFormat::Files)
+                && let Ok(current_files) = ctx.get_files()
+            {
+                let mut a = nf.clone();
+                let mut b = current_files;
+                a.sort();
+                b.sort();
+                if a == b {
+                    return false;
                 }
             }
         }
     }
 
     // Skip if the beat is older than what was already processed
-    if let Some(lb) = *last_beat {
-        if parsed.beat < lb {
-            log::info!(
-                "Skipping reading clipboard from {} as a newer clipboard was already processed",
-                file.display()
-            );
-            return false;
-        }
+    if let Some(lb) = *last_beat
+        && parsed.beat < lb
+    {
+        log::info!(
+            "Skipping reading clipboard from {} as a newer clipboard was already processed",
+            file.display()
+        );
+        return false;
     }
 
     *last_beat = Some(beat);

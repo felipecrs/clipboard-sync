@@ -43,10 +43,10 @@ pub fn get_files_size_mb(paths: &[PathBuf]) -> f64 {
     let mut total: u64 = 0;
     for path in paths {
         for entry in WalkDir::new(path).into_iter().flatten() {
-            if entry.file_type().is_file() {
-                if let Ok(meta) = entry.metadata() {
-                    total += meta.len();
-                }
+            if entry.file_type().is_file()
+                && let Ok(meta) = entry.metadata()
+            {
+                total += meta.len();
             }
         }
     }
@@ -77,10 +77,10 @@ pub fn delete_file_or_folder(path: &std::path::Path) {
         if let Err(e) = std::fs::remove_dir_all(path) {
             log::error!("Error deleting {}: {e}", path.display());
         }
-    } else if let Err(e) = std::fs::remove_file(path) {
-        if e.kind() != std::io::ErrorKind::NotFound {
-            log::error!("Error deleting {}: {e}", path.display());
-        }
+    } else if let Err(e) = std::fs::remove_file(path)
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        log::error!("Error deleting {}: {e}", path.display());
     }
 }
 

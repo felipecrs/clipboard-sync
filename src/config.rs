@@ -7,16 +7,12 @@ use std::path::PathBuf;
 /// Watch mode for detecting incoming clipboard files.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub enum WatchMode {
+    #[default]
     Native,
     Polling,
     PollingHarder,
-}
-
-impl Default for WatchMode {
-    fn default() -> Self {
-        Self::Native
-    }
 }
 
 /// Persistent application configuration.

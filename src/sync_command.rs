@@ -56,10 +56,8 @@ impl SyncCommand {
                 if let Some(stdout) = child.stdout.take() {
                     std::thread::spawn(move || {
                         let reader = BufReader::new(stdout);
-                        for line in reader.lines() {
-                            if let Ok(line) = line {
-                                log::info!("[sync-command] {line}");
-                            }
+                        for line in reader.lines().map_while(Result::ok) {
+                            log::info!("[sync-command] {line}");
                         }
                     });
                 }
@@ -68,10 +66,8 @@ impl SyncCommand {
                 if let Some(stderr) = child.stderr.take() {
                     std::thread::spawn(move || {
                         let reader = BufReader::new(stderr);
-                        for line in reader.lines() {
-                            if let Ok(line) = line {
-                                log::warn!("[sync-command] {line}");
-                            }
+                        for line in reader.lines().map_while(Result::ok) {
+                            log::warn!("[sync-command] {line}");
                         }
                     });
                 }

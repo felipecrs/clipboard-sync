@@ -17,14 +17,16 @@ use crate::clipboard::{
     clean_files, now_ms, parse_clipboard_filename, read_clipboard_from_file,
     write_clipboard_to_file,
 };
-use crate::config::{load_config, save_config, Config, WatchMode};
+use crate::config::{Config, WatchMode, load_config, save_config};
 use crate::consts::*;
-use crate::platform::{init_platform, send_notification, NotificationDuration};
+use crate::platform::{NotificationDuration, init_platform, send_notification};
 use crate::sync_command::SyncCommand;
 use crate::types::*;
-use crate::ui::{build_tray_menu, MenuAction};
+use crate::ui::{MenuAction, build_tray_menu};
 use crate::update::UpdateInfo;
-use crate::utils::{get_executable_directory, get_executable_path, get_hostname, open_path, open_url};
+use crate::utils::{
+    get_executable_directory, get_executable_path, get_hostname, open_path, open_url,
+};
 
 use auto_launch::AutoLaunchBuilder;
 use clipboard_rs::{ClipboardHandler, ClipboardWatcher, ClipboardWatcherContext, WatcherShutdown};
@@ -196,7 +198,6 @@ fn main() {
     let config = load_config();
     log::info!("Loaded config: {:?}", config);
 
-
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
 
     // Set up a Win32 job object so all child processes are killed when we exit
@@ -205,7 +206,7 @@ fn main() {
         let job = win32job::Job::create().expect("Failed to create Win32 job object");
         let mut info = job.query_extended_limit_info().unwrap();
         info.limit_kill_on_job_close();
-        job.set_extended_limit_info(&mut info).unwrap();
+        job.set_extended_limit_info(&info).unwrap();
         job.assign_current_process().unwrap();
         job // keep alive for the lifetime of the process
     };
@@ -224,8 +225,7 @@ fn main() {
     MenuEvent::receiver();
 
     // Build initial menu (auto-launch status will be checked when initializing)
-    let (tray_menu, menu_actions) =
-        build_tray_menu(&config, false, &None, &config.folder);
+    let (tray_menu, menu_actions) = build_tray_menu(&config, false, &None, &config.folder);
 
     let mut tray_icon_handle = None;
 
@@ -260,7 +260,8 @@ fn main() {
 
     event_loop.run(move |event, _, control_flow| {
         // Use WaitUntil with a 1-second interval for timer-based tasks
-        *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_secs(TIMER_TICK_INTERVAL_SECS));
+        *control_flow =
+            ControlFlow::WaitUntil(Instant::now() + Duration::from_secs(TIMER_TICK_INTERVAL_SECS));
 
         match event {
             Event::NewEvents(tao::event::StartCause::Init) => {
@@ -300,12 +301,7 @@ fn main() {
             }
 
             Event::UserEvent(UserEvent::Menu(menu_event)) => {
-                handle_menu_event(
-                    &menu_event.id,
-                    &mut state,
-                    &main_proxy,
-                    &tray_icon_handle,
-                );
+                handle_menu_event(&menu_event.id, &mut state, &main_proxy, &tray_icon_handle);
             }
 
             Event::UserEvent(UserEvent::TrayIcon(_tray_event)) => {
@@ -330,10 +326,10 @@ fn initialize(
         }
     }
 
-    if state.sync_folder.is_none() {
-        if let Some(ref folder) = state.config.folder {
-            state.sync_folder = Some(PathBuf::from(folder));
-        }
+    if state.sync_folder.is_none()
+        && let Some(ref folder) = state.config.folder
+    {
+        state.sync_folder = Some(PathBuf::from(folder));
     }
 
     let sync_folder = match &state.sync_folder {
@@ -421,7 +417,8 @@ fn start_fs_watcher(
     };
 
     let watcher: Option<Box<dyn Watcher + Send>> = if *watch_mode == WatchMode::Polling {
-        let config = notify::Config::default().with_poll_interval(Duration::from_secs(FS_WATCHER_POLL_INTERVAL_SECS));
+        let config = notify::Config::default()
+            .with_poll_interval(Duration::from_secs(FS_WATCHER_POLL_INTERVAL_SECS));
         match notify::PollWatcher::new(event_handler, config) {
             Ok(mut w) => {
                 if let Err(e) = w.watch(sync_folder, RecursiveMode::NonRecursive) {
@@ -478,10 +475,8 @@ fn uninitialize(
     // Remove keep-alive file
     if let Some(ref sync_folder) = state.sync_folder {
         log::info!("Removing keep-alive file...");
-        let keep_alive_path = sync_folder.join(format!(
-            "{}{}",
-            state.hostname, IS_RECEIVING_FILE_SUFFIX
-        ));
+        let keep_alive_path =
+            sync_folder.join(format!("{}{}", state.hostname, IS_RECEIVING_FILE_SUFFIX));
         let _ = std::fs::remove_file(keep_alive_path);
     }
 
@@ -534,10 +529,7 @@ fn handle_fs_event(
     }
 }
 
-fn handle_clipboard_changed(
-    state: &mut AppState,
-    tray_icon_handle: &Option<tray_icon::TrayIcon>,
-) {
+fn handle_clipboard_changed(state: &mut AppState, tray_icon_handle: &Option<tray_icon::TrayIcon>) {
     if !state.initialized {
         return;
     }
@@ -549,10 +541,10 @@ fn handle_clipboard_changed(
 
     // Clipboard debounce
     let now = now_ms();
-    if let Some(last) = state.last_clipboard_event {
-        if now - last < CLIPBOARD_DEBOUNCE_MS {
-            return;
-        }
+    if let Some(last) = state.last_clipboard_event
+        && now - last < CLIPBOARD_DEBOUNCE_MS
+    {
+        return;
     }
     state.last_clipboard_event = Some(now);
 
@@ -624,12 +616,12 @@ fn handle_timer_tick(
     let now = Instant::now();
 
     // Revert icon if needed
-    if let Some(revert_time) = state.icon_revert_time {
-        if now >= revert_time {
-            state.icon_revert_time = None;
-            if state.initialized {
-                update_tray_icon(state, tray_icon_handle, TrayIconState::Working);
-            }
+    if let Some(revert_time) = state.icon_revert_time
+        && now >= revert_time
+    {
+        state.icon_revert_time = None;
+        if state.initialized {
+            update_tray_icon(state, tray_icon_handle, TrayIconState::Working);
         }
     }
 
@@ -760,10 +752,10 @@ fn poll_harder_scan(
     }
 
     // Skip already-processed beats
-    if let Some(last) = state.last_beat {
-        if file.beat <= last {
-            return;
-        }
+    if let Some(last) = state.last_beat
+        && file.beat <= last
+    {
+        return;
     }
 
     let received = read_clipboard_from_file(
@@ -829,10 +821,7 @@ fn update_tray_icon(
     }
 }
 
-fn set_tray_tooltip(
-    tray_icon_handle: &Option<tray_icon::TrayIcon>,
-    status: &str,
-) {
+fn set_tray_tooltip(tray_icon_handle: &Option<tray_icon::TrayIcon>, status: &str) {
     let tooltip = if status.is_empty() {
         format!("{APP_NAME} v{CURRENT_VERSION}")
     } else {
@@ -843,10 +832,7 @@ fn set_tray_tooltip(
     }
 }
 
-fn rebuild_menu(
-    state: &mut AppState,
-    tray_icon_handle: &Option<tray_icon::TrayIcon>,
-) {
+fn rebuild_menu(state: &mut AppState, tray_icon_handle: &Option<tray_icon::TrayIcon>) {
     let app_path = get_executable_path().to_str().unwrap().to_string();
     let auto_launch = AutoLaunchBuilder::new()
         .set_app_name(APP_NAME)
@@ -866,7 +852,7 @@ fn rebuild_menu(
     state.menu_actions = new_actions;
 
     if let Some(handle) = tray_icon_handle {
-        let _ = handle.set_menu(Some(Box::new(new_menu)));
+        handle.set_menu(Some(Box::new(new_menu)));
     }
 }
 
@@ -969,7 +955,11 @@ fn handle_menu_event(
         }
         MenuAction::SetSyncCommand => {
             let current = &state.config.sync_command;
-            let default = if current.is_empty() { "" } else { current.as_str() };
+            let default = if current.is_empty() {
+                ""
+            } else {
+                current.as_str()
+            };
             if let Some(cmd) = tinyfiledialogs::input_box(
                 "Sync command",
                 "Enter a command to run before syncing (leave empty to disable):",
@@ -1005,7 +995,10 @@ fn handle_menu_event(
                 let download_url = crate::update::get_download_url(&info);
                 let _ = send_notification(
                     "Update available",
-                    &format!("v{} is available. Opening download page...", info.latest_version),
+                    &format!(
+                        "v{} is available. Opening download page...",
+                        info.latest_version
+                    ),
                     NotificationDuration::Short,
                 );
                 open_url(&download_url);
@@ -1031,8 +1024,5 @@ fn handle_menu_event(
 
 /// Pick a folder using a cross-platform dialog.
 fn pick_folder() -> Option<String> {
-    tinyfiledialogs::select_folder_dialog(
-        "Select folder to save and read clipboard files",
-        "",
-    )
+    tinyfiledialogs::select_folder_dialog("Select folder to save and read clipboard files", "")
 }
