@@ -49,7 +49,13 @@ pub fn restart_onedrive() {
     "#;
 
     let result = std::process::Command::new("PowerShell.exe")
-        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script])
+        .args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            script,
+        ])
         .output();
 
     match result {
@@ -63,7 +69,10 @@ pub fn restart_onedrive() {
                 log::warn!("[restart-onedrive] {}", stderr.trim());
             }
             if !output.status.success() {
-                log::error!("OneDrive restart failed with exit code: {:?}", output.status.code());
+                log::error!(
+                    "OneDrive restart failed with exit code: {:?}",
+                    output.status.code()
+                );
             }
         }
         Err(e) => {

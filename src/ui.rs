@@ -70,12 +70,8 @@ pub fn build_tray_menu(
 
     // Watch mode submenu
     let watch_submenu = Submenu::new("Watch mode", true);
-    let wm_native = CheckMenuItem::new(
-        "Native",
-        true,
-        config.watch_mode == WatchMode::Native,
-        None,
-    );
+    let wm_native =
+        CheckMenuItem::new("Native", true, config.watch_mode == WatchMode::Native, None);
     actions.insert(wm_native.id().clone(), MenuAction::SetWatchModeNative);
     watch_submenu.append(&wm_native).unwrap();
 
@@ -94,7 +90,10 @@ pub fn build_tray_menu(
         config.watch_mode == WatchMode::PollingHarder,
         None,
     );
-    actions.insert(wm_polling_harder.id().clone(), MenuAction::SetWatchModePollingHarder);
+    actions.insert(
+        wm_polling_harder.id().clone(),
+        MenuAction::SetWatchModePollingHarder,
+    );
     watch_submenu.append(&wm_polling_harder).unwrap();
     menu.append(&watch_submenu).unwrap();
 
@@ -104,12 +103,8 @@ pub fn build_tray_menu(
     menu.append(&auto_clean).unwrap();
 
     // Sync command
-    let sync_cmd_item = CheckMenuItem::new(
-        "Sync command",
-        true,
-        !config.sync_command.is_empty(),
-        None,
-    );
+    let sync_cmd_item =
+        CheckMenuItem::new("Sync command", true, !config.sync_command.is_empty(), None);
     actions.insert(sync_cmd_item.id().clone(), MenuAction::SetSyncCommand);
     menu.append(&sync_cmd_item).unwrap();
 
