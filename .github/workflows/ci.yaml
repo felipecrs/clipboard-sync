@@ -17,51 +17,34 @@ jobs:
         os: [macos, windows, ubuntu]
       fail-fast: false
     runs-on: "${{ matrix.os }}-latest"
+    env:
+      CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@v6
-      - uses: volta-cli/action@v4
-      # https://github.com/actions/runner/issues/2958#issuecomment-2186602747
-      - if: matrix.os == 'macos'
-        run: brew install python-setuptools
-      # https://www.electronforge.io/config/makers/flatpak#requirements
-      - if: matrix.os == 'ubuntu'
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo fmt --check
+      - run: cargo clippy --locked
+      - if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        shell: bash
         run: |
-          set -ex
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder elfutils
-          flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run format:check
-      - run: npm run make
+          version="${GITHUB_REF#refs/tags/v}"
+          sed -i "s/^version = \"0.0.0-development\"$/version = \"${version}\"/" Cargo.toml Cargo.lock
+          grep -q "^version = \"${version}\"$" Cargo.toml Cargo.lock
+      - run: cargo build --release --frozen
+      - uses: actions/upload-artifact@v7
+        with:
+          name: build-${{ matrix.os }}
+          path: target/release/ClipboardSync*
   release:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: build
-    strategy:
-      matrix:
-        os: [macos, windows, ubuntu]
-      fail-fast: false
-    runs-on: "${{ matrix.os }}-latest"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # for release
     steps:
-      - uses: actions/checkout@v6
-      - uses: volta-cli/action@v4
-      # https://github.com/actions/runner/issues/2958#issuecomment-2186602747
-      - if: matrix.os == 'macos'
-        run: brew install python-setuptools
-      # https://www.electronforge.io/config/makers/flatpak#requirements
-      - if: matrix.os == 'ubuntu'
-        run: |
-          set -ex
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends flatpak flatpak-builder elfutils
-          flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-      - run: npm ci
-      - run: npm version --no-git-tag-version "${{ github.ref_name }}"
-      - run: npm run make
+      - uses: actions/download-artifact@v8
       - uses: softprops/action-gh-release@v2
         with:
           make_latest: true
           files: |
-            out/make/**/*.exe
-            out/make/**/*.dmg
-            out/make/**/*.flatpak
+            target/release/ClipboardSync*
