@@ -33,7 +33,7 @@ single-instance = "0.3.3"
 tao = "0.34.3"
 tray-icon = "0.21.1"
 ureq = { version = "3.1.4", default-features = false, features = [
-	"native-tls"
+	"native-tls",
 ] }
 walkdir = "2.5.0"
 tinyfiledialogs = "3.9"
