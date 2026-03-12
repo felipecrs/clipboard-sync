@@ -45,7 +45,7 @@
     "electron": "^40.8.0",
     "electron-vite": "^5.0.0",
     "eslint": "^9.39.4",
-    "eslint-plugin-unicorn": "^62.0.0",
+    "eslint-plugin-unicorn": "^63.0.0",
     "execa": "^9.6.1",
     "neostandard": "^0.13.0",
     "prettier": "^3.8.1",
