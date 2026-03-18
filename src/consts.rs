@@ -45,8 +45,5 @@ pub const IDLE_TIMEOUT_SECS: u64 = 15 * 60;
 /// Max time to wait for sync folder after starting sync command (seconds).
 pub const SYNC_COMMAND_WAIT_SECS: u64 = 15;
 
-/// Interval for periodic timer-based tasks (seconds).
-pub const TIMER_TICK_INTERVAL_SECS: u64 = 1;
-
 /// Polling interval for file system watcher in polling mode (seconds).
 pub const FS_WATCHER_POLL_INTERVAL_SECS: u64 = 1;

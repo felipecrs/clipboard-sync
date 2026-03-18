@@ -1,3 +1,4 @@
+use crate::update::UpdateInfo;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -74,4 +75,26 @@ pub enum UserEvent {
     ClipboardFileDetected(PathBuf),
     /// Request a config reload / reinitialize.
     Reload,
+    /// Clipboard debounce completed, ready to write.
+    ClipboardReady,
+    /// A clipboard file is ready to be read (after settling delay).
+    ClipboardFileReady(PathBuf),
+    /// Icon flash duration expired, revert to working state.
+    RevertIcon,
+    /// Time to write keep-alive file.
+    KeepAlive,
+    /// Time to clean old clipboard files.
+    Cleanup,
+    /// Time to check folder accessibility.
+    CheckFolderAccess,
+    /// Time to check idle state.
+    CheckIdleState,
+    /// Time to check sync command health.
+    CheckSyncCommand,
+    /// Time to do a PollingHarder scan.
+    PollHarderScan,
+    /// Auto update check completed.
+    UpdateCheckComplete(Option<UpdateInfo>),
+    /// Manual (user-initiated) update check completed.
+    ManualUpdateCheckComplete(Option<UpdateInfo>),
 }

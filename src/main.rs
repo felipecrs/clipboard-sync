@@ -34,6 +34,7 @@ use faccess::PathExt;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use simplelog::*;
 use single_instance::SingleInstance;
+use smol::Task;
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -42,6 +43,9 @@ use tao::event::Event;
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
 use tray_icon::menu::{MenuEvent, MenuId};
 use tray_icon::{TrayIconBuilder, TrayIconEvent};
+
+/// Global async executor for background tasks.
+static EXECUTOR: smol::Executor<'static> = smol::Executor::new();
 
 // --- Clipboard watcher handler ---
 
@@ -89,7 +93,6 @@ struct AppState {
 
     // Icon state
     current_icon: TrayIconState,
-    icon_revert_time: Option<Instant>,
 
     // For clipboard change debouncing
     last_clipboard_event: Option<u64>,
@@ -97,14 +100,19 @@ struct AppState {
     // Idle suspension tracking
     suspended_by_idle: bool,
 
-    // Timer state for periodic tasks
-    last_keep_alive: Option<Instant>,
-    last_clean: Option<Instant>,
+    // Folder check timing (dynamic interval)
     last_folder_check: Option<Instant>,
     sync_command_started_at: Option<Instant>,
 
     // Menu action map
     menu_actions: HashMap<MenuId, MenuAction>,
+
+    // Async task handles - tasks created during initialize(), cancelled during uninitialize()
+    init_tasks: Vec<Task<()>>,
+
+    // One-shot async task handles
+    icon_revert_task: Option<Task<()>>,
+    clipboard_write_task: Option<Task<()>>,
 }
 
 fn get_tray_icon(state: TrayIconState) -> tray_icon::Icon {
@@ -198,6 +206,9 @@ fn main() {
     let config = load_config();
     log::info!("Loaded config: {:?}", config);
 
+    // Start async executor worker thread
+    std::thread::spawn(|| smol::block_on(EXECUTOR.run(smol::future::pending::<()>())));
+
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
 
     // Set up a Win32 job object so all child processes are killed when we exit
@@ -246,22 +257,23 @@ fn main() {
         auto_launch_enabled: false,
         update_info: None,
         current_icon: TrayIconState::Suspended,
-        icon_revert_time: None,
         last_clipboard_event: None,
         suspended_by_idle: false,
-        last_keep_alive: None,
-        last_clean: None,
         last_folder_check: None,
         sync_command_started_at: None,
         menu_actions,
+        init_tasks: Vec::new(),
+        icon_revert_task: None,
+        clipboard_write_task: None,
     };
 
     let main_proxy = event_loop.create_proxy();
 
+    // Spawn always-running periodic async tasks
+    spawn_periodic_tasks(&main_proxy);
+
     event_loop.run(move |event, _, control_flow| {
-        // Use WaitUntil with a 1-second interval for timer-based tasks
-        *control_flow =
-            ControlFlow::WaitUntil(Instant::now() + Duration::from_secs(TIMER_TICK_INTERVAL_SECS));
+        *control_flow = ControlFlow::Wait;
 
         match event {
             Event::NewEvents(tao::event::StartCause::Init) => {
@@ -276,23 +288,42 @@ fn main() {
                         .expect("Failed to build tray icon"),
                 );
 
-                // Auto-check for updates before initializing so menu reflects update status
-                state.update_info = update::check(true);
+                // Async update check (non-blocking)
+                let p = main_proxy.clone();
+                EXECUTOR
+                    .spawn(async move {
+                        let info = smol::unblock(|| update::check(true)).await;
+                        let _ = p.send_event(UserEvent::UpdateCheckComplete(info));
+                    })
+                    .detach();
 
                 // Initialize
                 initialize(&mut state, &main_proxy, &tray_icon_handle);
             }
 
-            Event::NewEvents(tao::event::StartCause::ResumeTimeReached { .. }) => {
-                handle_timer_tick(&mut state, &main_proxy, &tray_icon_handle);
+            Event::UserEvent(UserEvent::ClipboardChanged) => {
+                handle_clipboard_changed(&mut state, &main_proxy);
             }
 
-            Event::UserEvent(UserEvent::ClipboardChanged) => {
-                handle_clipboard_changed(&mut state, &tray_icon_handle);
+            Event::UserEvent(UserEvent::ClipboardReady) => {
+                handle_clipboard_ready(&mut state, &main_proxy, &tray_icon_handle);
             }
 
             Event::UserEvent(UserEvent::ClipboardFileDetected(path)) => {
-                handle_clipboard_file_detected(&mut state, &path, &tray_icon_handle);
+                if state.initialized {
+                    // Async delay to let the file be fully written
+                    let p = main_proxy.clone();
+                    EXECUTOR
+                        .spawn(async move {
+                            smol::Timer::after(Duration::from_millis(200)).await;
+                            let _ = p.send_event(UserEvent::ClipboardFileReady(path));
+                        })
+                        .detach();
+                }
+            }
+
+            Event::UserEvent(UserEvent::ClipboardFileReady(path)) => {
+                handle_clipboard_file_ready(&mut state, &path, &main_proxy, &tray_icon_handle);
             }
 
             Event::UserEvent(UserEvent::Reload) => {
@@ -308,9 +339,97 @@ fn main() {
                 // Tray icon events (click, double-click) can be handled here if needed
             }
 
+            Event::UserEvent(UserEvent::RevertIcon) => {
+                if state.initialized {
+                    update_tray_icon(&mut state, &tray_icon_handle, TrayIconState::Working);
+                }
+            }
+
+            Event::UserEvent(UserEvent::KeepAlive) => {
+                if state.initialized && state.config.is_receiving_anything() {
+                    if let Some(ref sf) = state.sync_folder {
+                        write_keep_alive(sf, &state.hostname);
+                    }
+                }
+            }
+
+            Event::UserEvent(UserEvent::Cleanup) => {
+                if state.initialized && state.config.auto_cleanup {
+                    if let Some(ref sf) = state.sync_folder {
+                        clean_files(sf, &state.hostname);
+                    }
+                }
+            }
+
+            Event::UserEvent(UserEvent::CheckFolderAccess) => {
+                handle_folder_check(&mut state, &main_proxy, &tray_icon_handle);
+            }
+
+            Event::UserEvent(UserEvent::CheckIdleState) => {
+                check_idle_state(&mut state, &main_proxy, &tray_icon_handle);
+            }
+
+            Event::UserEvent(UserEvent::CheckSyncCommand) => {
+                handle_sync_command_check(&mut state, &tray_icon_handle);
+            }
+
+            Event::UserEvent(UserEvent::PollHarderScan) => {
+                if state.initialized && state.config.watch_mode == WatchMode::PollingHarder {
+                    if let Some(ref sf) = state.sync_folder {
+                        let sf = sf.clone();
+                        poll_harder_scan(&mut state, &sf, &main_proxy, &tray_icon_handle);
+                    }
+                }
+            }
+
+            Event::UserEvent(UserEvent::UpdateCheckComplete(info)) => {
+                state.update_info = info;
+                rebuild_menu(&mut state, &tray_icon_handle);
+            }
+
+            Event::UserEvent(UserEvent::ManualUpdateCheckComplete(info)) => {
+                handle_manual_update_result(&mut state, info, &tray_icon_handle);
+            }
+
             _ => {}
         }
     });
+}
+
+/// Spawn always-running periodic async tasks that send events to the main event loop.
+fn spawn_periodic_tasks(proxy: &tao::event_loop::EventLoopProxy<UserEvent>) {
+    // Folder access check (every 1s)
+    let p = proxy.clone();
+    EXECUTOR
+        .spawn(async move {
+            loop {
+                smol::Timer::after(Duration::from_secs(1)).await;
+                let _ = p.send_event(UserEvent::CheckFolderAccess);
+            }
+        })
+        .detach();
+
+    // Idle detection (every 1s)
+    let p = proxy.clone();
+    EXECUTOR
+        .spawn(async move {
+            loop {
+                smol::Timer::after(Duration::from_secs(1)).await;
+                let _ = p.send_event(UserEvent::CheckIdleState);
+            }
+        })
+        .detach();
+
+    // Sync command health check (every 1s)
+    let p = proxy.clone();
+    EXECUTOR
+        .spawn(async move {
+            loop {
+                smol::Timer::after(Duration::from_secs(1)).await;
+                let _ = p.send_event(UserEvent::CheckSyncCommand);
+            }
+        })
+        .detach();
 }
 
 fn initialize(
@@ -385,14 +504,40 @@ fn initialize(
         // Write the initial keep-alive file
         log::info!("Writing keep-alive file...");
         write_keep_alive(&sync_folder, &state.hostname);
-        state.last_keep_alive = Some(Instant::now());
+
+        // Spawn periodic keep-alive async task
+        let p = proxy.clone();
+        state.init_tasks.push(EXECUTOR.spawn(async move {
+            loop {
+                smol::Timer::after(Duration::from_secs(KEEP_ALIVE_INTERVAL_SECS)).await;
+                let _ = p.send_event(UserEvent::KeepAlive);
+            }
+        }));
+
+        // Spawn PollingHarder scan task if needed
+        if watch_mode == WatchMode::PollingHarder {
+            let p = proxy.clone();
+            state.init_tasks.push(EXECUTOR.spawn(async move {
+                loop {
+                    smol::Timer::after(Duration::from_secs(1)).await;
+                    let _ = p.send_event(UserEvent::PollHarderScan);
+                }
+            }));
+        }
     }
 
-    // Initial auto-cleanup
+    // Initial auto-cleanup + periodic cleanup task
     if state.config.auto_cleanup {
         log::info!("Performing initial cleanup...");
         clean_files(&sync_folder, &state.hostname);
-        state.last_clean = Some(Instant::now());
+
+        let p = proxy.clone();
+        state.init_tasks.push(EXECUTOR.spawn(async move {
+            loop {
+                smol::Timer::after(Duration::from_secs(60)).await;
+                let _ = p.send_event(UserEvent::Cleanup);
+            }
+        }));
     }
 
     state.initialized = true;
@@ -459,6 +604,11 @@ fn uninitialize(
 
     update_tray_icon(state, tray_icon_handle, TrayIconState::Suspended);
     set_tray_tooltip(tray_icon_handle, reason);
+
+    // Cancel all async init tasks (dropping cancels them)
+    state.init_tasks.clear();
+    state.icon_revert_task = None;
+    state.clipboard_write_task = None;
 
     // Stop clipboard watcher
     if let Some(shutdown) = state.clipboard_watcher_shutdown.take() {
@@ -529,17 +679,19 @@ fn handle_fs_event(
     }
 }
 
-fn handle_clipboard_changed(state: &mut AppState, tray_icon_handle: &Option<tray_icon::TrayIcon>) {
+fn handle_clipboard_changed(
+    state: &mut AppState,
+    proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
+) {
     if !state.initialized {
         return;
     }
 
-    let sync_folder = match &state.sync_folder {
-        Some(f) => f.clone(),
-        None => return,
-    };
+    if state.sync_folder.is_none() {
+        return;
+    }
 
-    // Clipboard debounce
+    // Clipboard debounce (leading-edge: ignore events too close together)
     let now = now_ms();
     if let Some(last) = state.last_clipboard_event
         && now - last < CLIPBOARD_DEBOUNCE_MS
@@ -548,8 +700,30 @@ fn handle_clipboard_changed(state: &mut AppState, tray_icon_handle: &Option<tray
     }
     state.last_clipboard_event = Some(now);
 
-    // Small delay to let clipboard be fully written
-    std::thread::sleep(Duration::from_millis(CLIPBOARD_WRITE_DELAY_MS));
+    // Cancel any pending write task
+    state.clipboard_write_task = None;
+
+    // Schedule delayed write via async timer (replaces blocking sleep)
+    let p = proxy.clone();
+    state.clipboard_write_task = Some(EXECUTOR.spawn(async move {
+        smol::Timer::after(Duration::from_millis(CLIPBOARD_WRITE_DELAY_MS)).await;
+        let _ = p.send_event(UserEvent::ClipboardReady);
+    }));
+}
+
+fn handle_clipboard_ready(
+    state: &mut AppState,
+    proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
+    tray_icon_handle: &Option<tray_icon::TrayIcon>,
+) {
+    if !state.initialized {
+        return;
+    }
+
+    let sync_folder = match &state.sync_folder {
+        Some(f) => f.clone(),
+        None => return,
+    };
 
     let sent = write_clipboard_to_file(
         &sync_folder,
@@ -564,13 +738,14 @@ fn handle_clipboard_changed(state: &mut AppState, tray_icon_handle: &Option<tray
     );
 
     if sent {
-        set_icon_for_duration(state, tray_icon_handle, TrayIconState::Sent);
+        set_icon_for_duration(state, tray_icon_handle, proxy, TrayIconState::Sent);
     }
 }
 
-fn handle_clipboard_file_detected(
+fn handle_clipboard_file_ready(
     state: &mut AppState,
     path: &Path,
+    proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
     tray_icon_handle: &Option<tray_icon::TrayIcon>,
 ) {
     if !state.initialized {
@@ -581,9 +756,6 @@ fn handle_clipboard_file_detected(
         Some(f) => f.clone(),
         None => return,
     };
-
-    // Small delay to let the file be fully written
-    std::thread::sleep(Duration::from_millis(200));
 
     let parsed = parse_clipboard_filename(
         path,
@@ -603,37 +775,19 @@ fn handle_clipboard_file_detected(
         );
 
         if received {
-            set_icon_for_duration(state, tray_icon_handle, TrayIconState::Received);
+            set_icon_for_duration(state, tray_icon_handle, proxy, TrayIconState::Received);
         }
     }
 }
 
-fn handle_timer_tick(
+fn handle_folder_check(
     state: &mut AppState,
     proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
     tray_icon_handle: &Option<tray_icon::TrayIcon>,
 ) {
     let now = Instant::now();
 
-    // Revert icon if needed
-    if let Some(revert_time) = state.icon_revert_time
-        && now >= revert_time
-    {
-        state.icon_revert_time = None;
-        if state.initialized {
-            update_tray_icon(state, tray_icon_handle, TrayIconState::Working);
-        }
-    }
-
-    // Check sync command health
-    if let Some(status) = state.sync_command.check() {
-        let msg = format!("The sync command exited unexpectedly with status: {status}");
-        let _ = send_notification("Sync command failed", &msg, NotificationDuration::Short);
-        uninitialize(state, tray_icon_handle, "Sync command failed");
-    }
-
-    // Folder accessibility check
-    // Check every 1s for SYNC_COMMAND_WAIT_SECS after starting a sync command, then every 30s
+    // Dynamic interval: check every 1s while waiting for sync command, then every 30s
     let folder_check_interval = match state.sync_command_started_at {
         Some(t) if now.duration_since(t) < Duration::from_secs(SYNC_COMMAND_WAIT_SECS) => {
             Duration::from_secs(1)
@@ -644,68 +798,36 @@ fn handle_timer_tick(
         }
         None => Duration::from_secs(30),
     };
-    let should_check_folder = state
+
+    let should_check = state
         .last_folder_check
         .map(|t| now.duration_since(t) >= folder_check_interval)
         .unwrap_or(true);
 
-    if should_check_folder {
-        state.last_folder_check = Some(now);
-
-        if let Some(ref sync_folder) = state.sync_folder {
-            let accessible = sync_folder.is_dir();
-
-            if !state.initialized && accessible {
-                log::info!("Sync folder is now accessible. Starting Clipboard Sync...");
-                initialize(state, proxy, tray_icon_handle);
-            } else if state.initialized && !accessible {
-                log::info!("Sync folder is no longer accessible. Waiting for it...");
-                uninitialize(state, tray_icon_handle, "Folder unavailable");
-            }
-        }
-    }
-
-    // Idle detection (must run even when not initialized to detect system becoming active)
-    check_idle_state(state, proxy, tray_icon_handle);
-
-    if !state.initialized {
+    if !should_check {
         return;
     }
 
-    let sync_folder = match &state.sync_folder {
-        Some(f) => f.clone(),
-        None => return,
-    };
+    state.last_folder_check = Some(now);
 
-    if state.config.is_receiving_anything() {
-        // PollingHarder: manually scan directory for new clipboard files every tick
-        if state.config.watch_mode == WatchMode::PollingHarder {
-            poll_harder_scan(state, &sync_folder, tray_icon_handle);
-        }
+    if let Some(ref sync_folder) = state.sync_folder {
+        let accessible = sync_folder.is_dir();
 
-        // Keep-alive (every 4 minutes)
-        let should_keep_alive = state
-            .last_keep_alive
-            .map(|t| now.duration_since(t) >= Duration::from_secs(KEEP_ALIVE_INTERVAL_SECS))
-            .unwrap_or(true);
-
-        if should_keep_alive {
-            write_keep_alive(&sync_folder, &state.hostname);
-            state.last_keep_alive = Some(now);
+        if !state.initialized && accessible {
+            log::info!("Sync folder is now accessible. Starting Clipboard Sync...");
+            initialize(state, proxy, tray_icon_handle);
+        } else if state.initialized && !accessible {
+            log::info!("Sync folder is no longer accessible. Waiting for it...");
+            uninitialize(state, tray_icon_handle, "Folder unavailable");
         }
     }
+}
 
-    // Auto-cleanup (every 1 minute)
-    if state.config.auto_cleanup {
-        let should_clean = state
-            .last_clean
-            .map(|t| now.duration_since(t) >= Duration::from_secs(60))
-            .unwrap_or(true);
-
-        if should_clean {
-            clean_files(&sync_folder, &state.hostname);
-            state.last_clean = Some(now);
-        }
+fn handle_sync_command_check(state: &mut AppState, tray_icon_handle: &Option<tray_icon::TrayIcon>) {
+    if let Some(status) = state.sync_command.check() {
+        let msg = format!("The sync command exited unexpectedly with status: {status}");
+        let _ = send_notification("Sync command failed", &msg, NotificationDuration::Short);
+        uninitialize(state, tray_icon_handle, "Sync command failed");
     }
 }
 
@@ -714,6 +836,7 @@ fn handle_timer_tick(
 fn poll_harder_scan(
     state: &mut AppState,
     sync_folder: &Path,
+    proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
     tray_icon_handle: &Option<tray_icon::TrayIcon>,
 ) {
     let entries = match std::fs::read_dir(sync_folder) {
@@ -768,7 +891,7 @@ fn poll_harder_scan(
     );
 
     if received {
-        set_icon_for_duration(state, tray_icon_handle, TrayIconState::Received);
+        set_icon_for_duration(state, tray_icon_handle, proxy, TrayIconState::Received);
     }
 }
 
@@ -801,10 +924,20 @@ fn check_idle_state(
 fn set_icon_for_duration(
     state: &mut AppState,
     tray_icon_handle: &Option<tray_icon::TrayIcon>,
+    proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
     icon: TrayIconState,
 ) {
     update_tray_icon(state, tray_icon_handle, icon);
-    state.icon_revert_time = Some(Instant::now() + Duration::from_secs(ICON_FLASH_DURATION_SECS));
+
+    // Cancel any existing revert task
+    state.icon_revert_task = None;
+
+    // Spawn one-shot async timer to revert icon
+    let p = proxy.clone();
+    state.icon_revert_task = Some(EXECUTOR.spawn(async move {
+        smol::Timer::after(Duration::from_secs(ICON_FLASH_DURATION_SECS)).await;
+        let _ = p.send_event(UserEvent::RevertIcon);
+    }));
 }
 
 fn update_tray_icon(
@@ -986,31 +1119,22 @@ fn handle_menu_event(
         MenuAction::RestartOneDrive => {
             #[cfg(target_os = "windows")]
             {
-                crate::platform::restart_onedrive();
+                EXECUTOR
+                    .spawn(async {
+                        smol::unblock(|| crate::platform::restart_onedrive()).await;
+                    })
+                    .detach();
             }
         }
         MenuAction::CheckForUpdates => {
-            let update = update::check(false);
-            if let Some(info) = update {
-                let download_url = crate::update::get_download_url(&info);
-                let _ = send_notification(
-                    "Update available",
-                    &format!(
-                        "v{} is available. Opening download page...",
-                        info.latest_version
-                    ),
-                    NotificationDuration::Short,
-                );
-                open_url(&download_url);
-                state.update_info = Some(info);
-                rebuild_menu(state, tray_icon_handle);
-            } else {
-                let _ = send_notification(
-                    "No updates found",
-                    "You are already running the latest version.",
-                    NotificationDuration::Short,
-                );
-            }
+            // Async update check (non-blocking)
+            let p = proxy.clone();
+            EXECUTOR
+                .spawn(async move {
+                    let info = smol::unblock(|| update::check(false)).await;
+                    let _ = p.send_event(UserEvent::ManualUpdateCheckComplete(info));
+                })
+                .detach();
         }
         MenuAction::OpenGitHub => {
             open_url(GITHUB_REPO_URL);
@@ -1019,6 +1143,33 @@ fn handle_menu_event(
             uninitialize(state, tray_icon_handle, "Exiting...");
             std::process::exit(0);
         }
+    }
+}
+
+fn handle_manual_update_result(
+    state: &mut AppState,
+    info: Option<UpdateInfo>,
+    tray_icon_handle: &Option<tray_icon::TrayIcon>,
+) {
+    if let Some(info) = info {
+        let download_url = crate::update::get_download_url(&info);
+        let _ = send_notification(
+            "Update available",
+            &format!(
+                "v{} is available. Opening download page...",
+                info.latest_version
+            ),
+            NotificationDuration::Short,
+        );
+        open_url(&download_url);
+        state.update_info = Some(info);
+        rebuild_menu(state, tray_icon_handle);
+    } else {
+        let _ = send_notification(
+            "No updates found",
+            "You are already running the latest version.",
+            NotificationDuration::Short,
+        );
     }
 }
 
