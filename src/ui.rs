@@ -16,11 +16,14 @@ pub enum MenuAction {
     SetWatchModePolling,
     SetWatchModePollingHarder,
     ToggleAutoCleanup,
+    ToggleCheckUpdatesOnLaunch,
     ToggleAutoStart,
     ChangeFolder,
     SetSyncCommand,
-    OpenFolder,
+    OpenSyncFolder,
+    OpenAppFolder,
     RestartOneDrive,
+    Reinitialize,
     CheckForUpdates,
     OpenGitHub,
     Quit,
@@ -36,31 +39,29 @@ pub fn build_tray_menu(
     let menu = Menu::new();
     let mut actions: HashMap<MenuId, MenuAction> = HashMap::new();
 
-    // Send submenu
+    // ── Clipboard ──────────────────────────────────────────────────────────
+    menu.append(&MenuItem::new("Clipboard", false, None))
+        .unwrap();
+
     let send_submenu = Submenu::new("Send", true);
     let send_texts = CheckMenuItem::new("Texts", true, config.send_texts, None);
     actions.insert(send_texts.id().clone(), MenuAction::ToggleSendTexts);
     send_submenu.append(&send_texts).unwrap();
-
     let send_images = CheckMenuItem::new("Images", true, config.send_images, None);
     actions.insert(send_images.id().clone(), MenuAction::ToggleSendImages);
     send_submenu.append(&send_images).unwrap();
-
     let send_files = CheckMenuItem::new("Files", true, config.send_files, None);
     actions.insert(send_files.id().clone(), MenuAction::ToggleSendFiles);
     send_submenu.append(&send_files).unwrap();
     menu.append(&send_submenu).unwrap();
 
-    // Receive submenu
     let receive_submenu = Submenu::new("Receive", true);
     let recv_texts = CheckMenuItem::new("Texts", true, config.receive_texts, None);
     actions.insert(recv_texts.id().clone(), MenuAction::ToggleReceiveTexts);
     receive_submenu.append(&recv_texts).unwrap();
-
     let recv_images = CheckMenuItem::new("Images", true, config.receive_images, None);
     actions.insert(recv_images.id().clone(), MenuAction::ToggleReceiveImages);
     receive_submenu.append(&recv_images).unwrap();
-
     let recv_files = CheckMenuItem::new("Files", true, config.receive_files, None);
     actions.insert(recv_files.id().clone(), MenuAction::ToggleReceiveFiles);
     receive_submenu.append(&recv_files).unwrap();
@@ -68,13 +69,37 @@ pub fn build_tray_menu(
 
     menu.append(&PredefinedMenuItem::separator()).unwrap();
 
-    // Watch mode submenu
+    // ── Sync ───────────────────────────────────────────────────────────────
+    menu.append(&MenuItem::new("Sync", false, None)).unwrap();
+
+    let change_folder = MenuItem::new("Change sync folder...", true, None);
+    actions.insert(change_folder.id().clone(), MenuAction::ChangeFolder);
+    menu.append(&change_folder).unwrap();
+
+    let open_sync_folder = MenuItem::new("Open sync folder...", sync_folder.is_some(), None);
+    actions.insert(open_sync_folder.id().clone(), MenuAction::OpenSyncFolder);
+    menu.append(&open_sync_folder).unwrap();
+
+    let sync_cmd_label = if config.sync_command.is_empty() {
+        "Set sync command..."
+    } else {
+        "Change sync command..."
+    };
+    let sync_cmd_item = MenuItem::new(sync_cmd_label, true, None);
+    actions.insert(sync_cmd_item.id().clone(), MenuAction::SetSyncCommand);
+    menu.append(&sync_cmd_item).unwrap();
+
+    menu.append(&PredefinedMenuItem::separator()).unwrap();
+
+    // ── Preferences ────────────────────────────────────────────────────────
+    menu.append(&MenuItem::new("Preferences", false, None))
+        .unwrap();
+
     let watch_submenu = Submenu::new("Watch mode", true);
     let wm_native =
         CheckMenuItem::new("Native", true, config.watch_mode == WatchMode::Native, None);
     actions.insert(wm_native.id().clone(), MenuAction::SetWatchModeNative);
     watch_submenu.append(&wm_native).unwrap();
-
     let wm_polling = CheckMenuItem::new(
         "Polling",
         true,
@@ -83,7 +108,6 @@ pub fn build_tray_menu(
     );
     actions.insert(wm_polling.id().clone(), MenuAction::SetWatchModePolling);
     watch_submenu.append(&wm_polling).unwrap();
-
     let wm_polling_harder = CheckMenuItem::new(
         "Polling harder",
         true,
@@ -97,70 +121,72 @@ pub fn build_tray_menu(
     watch_submenu.append(&wm_polling_harder).unwrap();
     menu.append(&watch_submenu).unwrap();
 
-    // Auto-clean
     let auto_clean = CheckMenuItem::new("Auto-clean", true, config.auto_cleanup, None);
     actions.insert(auto_clean.id().clone(), MenuAction::ToggleAutoCleanup);
     menu.append(&auto_clean).unwrap();
 
-    // Sync command
-    let sync_cmd_item =
-        CheckMenuItem::new("Sync command", true, !config.sync_command.is_empty(), None);
-    actions.insert(sync_cmd_item.id().clone(), MenuAction::SetSyncCommand);
-    menu.append(&sync_cmd_item).unwrap();
+    let check_updates_on_launch = CheckMenuItem::new(
+        "Check for updates on launch",
+        true,
+        config.check_updates_on_launch,
+        None,
+    );
+    actions.insert(
+        check_updates_on_launch.id().clone(),
+        MenuAction::ToggleCheckUpdatesOnLaunch,
+    );
+    menu.append(&check_updates_on_launch).unwrap();
 
-    // Auto-start on login
     #[cfg(not(target_os = "linux"))]
     {
-        let auto_start = CheckMenuItem::new("Auto-start on login", true, auto_launch_enabled, None);
+        let auto_start =
+            CheckMenuItem::new("Auto-launch on startup", true, auto_launch_enabled, None);
         actions.insert(auto_start.id().clone(), MenuAction::ToggleAutoStart);
         menu.append(&auto_start).unwrap();
     }
 
     menu.append(&PredefinedMenuItem::separator()).unwrap();
 
-    // Change folder
-    let change_folder = MenuItem::new("Change folder", true, None);
-    actions.insert(change_folder.id().clone(), MenuAction::ChangeFolder);
-    menu.append(&change_folder).unwrap();
+    // ── Troubleshooting ────────────────────────────────────────────────────
+    menu.append(&MenuItem::new("Troubleshooting", false, None))
+        .unwrap();
 
-    // Open folder
-    let open_folder = MenuItem::new("Open folder", sync_folder.is_some(), None);
-    actions.insert(open_folder.id().clone(), MenuAction::OpenFolder);
-    menu.append(&open_folder).unwrap();
+    let reinitialize = MenuItem::new("Reinitialize", true, None);
+    actions.insert(reinitialize.id().clone(), MenuAction::Reinitialize);
+    menu.append(&reinitialize).unwrap();
 
-    // Restart OneDrive (Windows only)
+    let open_app_folder = MenuItem::new("Open app folder...", true, None);
+    actions.insert(open_app_folder.id().clone(), MenuAction::OpenAppFolder);
+    menu.append(&open_app_folder).unwrap();
+
     #[cfg(target_os = "windows")]
     {
-        menu.append(&PredefinedMenuItem::separator()).unwrap();
-        let restart_od = MenuItem::new("Restart OneDrive", true, None);
+        let restart_od = MenuItem::new("Restart OneDrive...", true, None);
         actions.insert(restart_od.id().clone(), MenuAction::RestartOneDrive);
         menu.append(&restart_od).unwrap();
     }
 
     menu.append(&PredefinedMenuItem::separator()).unwrap();
 
-    // Check for updates
-    #[cfg(not(target_os = "linux"))]
-    {
-        let update_label = if update_info.is_some() {
-            "Download update"
-        } else {
-            "Check for updates"
-        };
-        let update_item = MenuItem::new(update_label, true, None);
-        actions.insert(update_item.id().clone(), MenuAction::CheckForUpdates);
-        menu.append(&update_item).unwrap();
-    }
-
     // GitHub
-    let github_item = MenuItem::new("GitHub", true, None);
+    let github_item = MenuItem::new("GitHub...", true, None);
     actions.insert(github_item.id().clone(), MenuAction::OpenGitHub);
     menu.append(&github_item).unwrap();
+
+    // Check for updates
+    let update_label = if update_info.is_some() {
+        "Download update..."
+    } else {
+        "Check for updates"
+    };
+    let update_item = MenuItem::new(update_label, true, None);
+    actions.insert(update_item.id().clone(), MenuAction::CheckForUpdates);
+    menu.append(&update_item).unwrap();
 
     menu.append(&PredefinedMenuItem::separator()).unwrap();
 
     // Quit
-    let quit_item = MenuItem::new("Exit", true, None);
+    let quit_item = MenuItem::new("Quit", true, None);
     actions.insert(quit_item.id().clone(), MenuAction::Quit);
     menu.append(&quit_item).unwrap();
 

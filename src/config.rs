@@ -29,6 +29,7 @@ pub struct Config {
     pub auto_cleanup: bool,
     pub watch_mode: WatchMode,
     pub sync_command: String,
+    pub check_updates_on_launch: bool,
 }
 
 impl Default for Config {
@@ -44,6 +45,7 @@ impl Default for Config {
             auto_cleanup: true,
             watch_mode: WatchMode::Native,
             sync_command: String::new(),
+            check_updates_on_launch: true,
         }
     }
 }

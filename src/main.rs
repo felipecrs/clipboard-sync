@@ -289,13 +289,15 @@ fn main() {
                 );
 
                 // Async update check (non-blocking)
-                let p = main_proxy.clone();
-                EXECUTOR
-                    .spawn(async move {
-                        let info = smol::unblock(|| update::check(true)).await;
-                        let _ = p.send_event(UserEvent::UpdateCheckComplete(info));
-                    })
-                    .detach();
+                if state.config.check_updates_on_launch {
+                    let p = main_proxy.clone();
+                    EXECUTOR
+                        .spawn(async move {
+                            let info = smol::unblock(|| update::check(true)).await;
+                            let _ = p.send_event(UserEvent::UpdateCheckComplete(info));
+                        })
+                        .detach();
+                }
 
                 // Initialize
                 initialize(&mut state, &main_proxy, &tray_icon_handle);
@@ -1007,10 +1009,13 @@ fn handle_menu_event(
         Some(MenuAction::SetWatchModePolling) => MenuAction::SetWatchModePolling,
         Some(MenuAction::SetWatchModePollingHarder) => MenuAction::SetWatchModePollingHarder,
         Some(MenuAction::ToggleAutoCleanup) => MenuAction::ToggleAutoCleanup,
+        Some(MenuAction::ToggleCheckUpdatesOnLaunch) => MenuAction::ToggleCheckUpdatesOnLaunch,
         Some(MenuAction::ToggleAutoStart) => MenuAction::ToggleAutoStart,
         Some(MenuAction::SetSyncCommand) => MenuAction::SetSyncCommand,
         Some(MenuAction::ChangeFolder) => MenuAction::ChangeFolder,
-        Some(MenuAction::OpenFolder) => MenuAction::OpenFolder,
+        Some(MenuAction::OpenSyncFolder) => MenuAction::OpenSyncFolder,
+        Some(MenuAction::OpenAppFolder) => MenuAction::OpenAppFolder,
+        Some(MenuAction::Reinitialize) => MenuAction::Reinitialize,
         Some(MenuAction::RestartOneDrive) => MenuAction::RestartOneDrive,
         Some(MenuAction::CheckForUpdates) => MenuAction::CheckForUpdates,
         Some(MenuAction::OpenGitHub) => MenuAction::OpenGitHub,
@@ -1069,6 +1074,11 @@ fn handle_menu_event(
             save_config(&state.config);
             let _ = proxy.send_event(UserEvent::Reload);
         }
+        MenuAction::ToggleCheckUpdatesOnLaunch => {
+            state.config.check_updates_on_launch = !state.config.check_updates_on_launch;
+            save_config(&state.config);
+            let _ = proxy.send_event(UserEvent::Reload);
+        }
         MenuAction::ToggleAutoStart => {
             let app_path = get_executable_path().to_str().unwrap().to_string();
             let auto_launch = AutoLaunchBuilder::new()
@@ -1111,10 +1121,16 @@ fn handle_menu_event(
                 let _ = proxy.send_event(UserEvent::Reload);
             }
         }
-        MenuAction::OpenFolder => {
+        MenuAction::OpenSyncFolder => {
             if let Some(ref folder) = state.sync_folder {
                 open_path(folder);
             }
+        }
+        MenuAction::OpenAppFolder => {
+            open_path(&get_executable_directory());
+        }
+        MenuAction::Reinitialize => {
+            let _ = proxy.send_event(UserEvent::Reload);
         }
         MenuAction::RestartOneDrive => {
             #[cfg(target_os = "windows")]
