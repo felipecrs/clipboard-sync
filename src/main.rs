@@ -348,18 +348,20 @@ fn main() {
             }
 
             Event::UserEvent(UserEvent::KeepAlive) => {
-                if state.initialized && state.config.is_receiving_anything() {
-                    if let Some(ref sf) = state.sync_folder {
-                        write_keep_alive(sf, &state.hostname);
-                    }
+                if state.initialized
+                    && state.config.is_receiving_anything()
+                    && let Some(ref sf) = state.sync_folder
+                {
+                    write_keep_alive(sf, &state.hostname);
                 }
             }
 
             Event::UserEvent(UserEvent::Cleanup) => {
-                if state.initialized && state.config.auto_cleanup {
-                    if let Some(ref sf) = state.sync_folder {
-                        clean_files(sf, &state.hostname);
-                    }
+                if state.initialized
+                    && state.config.auto_cleanup
+                    && let Some(ref sf) = state.sync_folder
+                {
+                    clean_files(sf, &state.hostname);
                 }
             }
 
@@ -376,11 +378,12 @@ fn main() {
             }
 
             Event::UserEvent(UserEvent::PollHarderScan) => {
-                if state.initialized && state.config.watch_mode == WatchMode::PollingHarder {
-                    if let Some(ref sf) = state.sync_folder {
-                        let sf = sf.clone();
-                        poll_harder_scan(&mut state, &sf, &main_proxy, &tray_icon_handle);
-                    }
+                if state.initialized
+                    && state.config.watch_mode == WatchMode::PollingHarder
+                    && let Some(ref sf) = state.sync_folder
+                {
+                    let sf = sf.clone();
+                    poll_harder_scan(&mut state, &sf, &main_proxy, &tray_icon_handle);
                 }
             }
 
@@ -1137,7 +1140,7 @@ fn handle_menu_event(
             {
                 EXECUTOR
                     .spawn(async {
-                        smol::unblock(|| crate::platform::restart_onedrive()).await;
+                        smol::unblock(crate::platform::restart_onedrive).await;
                     })
                     .detach();
             }
