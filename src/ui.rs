@@ -76,10 +76,6 @@ pub fn build_tray_menu(
     actions.insert(change_folder.id().clone(), MenuAction::ChangeFolder);
     menu.append(&change_folder).unwrap();
 
-    let open_sync_folder = MenuItem::new("Open sync folder...", sync_folder.is_some(), None);
-    actions.insert(open_sync_folder.id().clone(), MenuAction::OpenSyncFolder);
-    menu.append(&open_sync_folder).unwrap();
-
     let sync_cmd_label = if config.sync_command.is_empty() {
         "Set sync command..."
     } else {
@@ -154,6 +150,10 @@ pub fn build_tray_menu(
     let reinitialize = MenuItem::new("Reinitialize", true, None);
     actions.insert(reinitialize.id().clone(), MenuAction::Reinitialize);
     menu.append(&reinitialize).unwrap();
+
+    let open_sync_folder = MenuItem::new("Open sync folder...", sync_folder.is_some(), None);
+    actions.insert(open_sync_folder.id().clone(), MenuAction::OpenSyncFolder);
+    menu.append(&open_sync_folder).unwrap();
 
     let open_app_folder = MenuItem::new("Open app folder...", true, None);
     actions.insert(open_app_folder.id().clone(), MenuAction::OpenAppFolder);
