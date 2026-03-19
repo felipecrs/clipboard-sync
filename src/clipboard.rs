@@ -175,6 +175,17 @@ pub fn clean_files(sync_folder: &Path, hostname: &str) {
     }
 }
 
+/// Clipboard deduplication state shared between send and receive operations.
+#[derive(Debug, Default)]
+pub struct ClipboardDedupState {
+    pub last_beat: Option<u64>,
+    pub last_text_written: Option<ClipboardText>,
+    pub last_image_sha256_written: Option<String>,
+    pub last_text_read: Option<ClipboardText>,
+    pub last_image_sha256_read: Option<String>,
+    pub last_file_paths_read: Option<Vec<String>>,
+}
+
 /// Read the current clipboard content and write it to a file in the sync folder.
 ///
 /// Returns `true` if a file was written.
@@ -182,13 +193,14 @@ pub fn write_clipboard_to_file(
     sync_folder: &Path,
     hostname: &str,
     config: &crate::config::Config,
-    last_beat: &mut Option<u64>,
-    last_text_written: &mut Option<ClipboardText>,
-    last_image_sha256_written: &mut Option<String>,
-    last_text_read: &Option<ClipboardText>,
-    last_image_sha256_read: &Option<String>,
-    last_file_paths_read: &Option<Vec<String>>,
+    dedup: &mut ClipboardDedupState,
 ) -> bool {
+    let last_beat = &mut dedup.last_beat;
+    let last_text_written = &mut dedup.last_text_written;
+    let last_image_sha256_written = &mut dedup.last_image_sha256_written;
+    let last_text_read = &dedup.last_text_read;
+    let last_image_sha256_read = &dedup.last_image_sha256_read;
+    let last_file_paths_read = &dedup.last_file_paths_read;
     let beat = now_ms();
 
     // Check if any other computer is receiving
@@ -412,11 +424,12 @@ pub fn write_clipboard_to_file(
 pub fn read_clipboard_from_file(
     parsed: &ParsedClipboardFile,
     config: &crate::config::Config,
-    last_beat: &mut Option<u64>,
-    last_text_read: &mut Option<ClipboardText>,
-    last_image_sha256_read: &mut Option<String>,
-    last_file_paths_read: &mut Option<Vec<String>>,
+    dedup: &mut ClipboardDedupState,
 ) -> bool {
+    let last_beat = &mut dedup.last_beat;
+    let last_text_read = &mut dedup.last_text_read;
+    let last_image_sha256_read = &mut dedup.last_image_sha256_read;
+    let last_file_paths_read = &mut dedup.last_file_paths_read;
     let beat = now_ms();
     let file = &parsed.path;
 

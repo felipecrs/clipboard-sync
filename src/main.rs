@@ -14,7 +14,7 @@ mod update;
 mod utils;
 
 use crate::clipboard::{
-    clean_files, now_ms, parse_clipboard_filename, read_clipboard_from_file,
+    ClipboardDedupState, clean_files, now_ms, parse_clipboard_filename, read_clipboard_from_file,
     write_clipboard_to_file,
 };
 use crate::config::{Config, WatchMode, load_config, save_config};
@@ -69,12 +69,7 @@ struct AppState {
     initialized: bool,
 
     // Clipboard dedup state
-    last_beat: Option<u64>,
-    last_text_written: Option<ClipboardText>,
-    last_text_read: Option<ClipboardText>,
-    last_image_sha256_written: Option<String>,
-    last_image_sha256_read: Option<String>,
-    last_file_paths_read: Option<Vec<String>>,
+    dedup: ClipboardDedupState,
 
     // Clipboard watcher
     clipboard_watcher_shutdown: Option<WatcherShutdown>,
@@ -245,12 +240,7 @@ fn main() {
         sync_folder: config.folder.as_ref().map(PathBuf::from),
         config,
         initialized: false,
-        last_beat: None,
-        last_text_written: None,
-        last_text_read: None,
-        last_image_sha256_written: None,
-        last_image_sha256_read: None,
-        last_file_paths_read: None,
+        dedup: ClipboardDedupState::default(),
         clipboard_watcher_shutdown: None,
         _fs_watcher: None,
         sync_command: SyncCommand::new(),
@@ -711,12 +701,7 @@ fn handle_clipboard_ready(
         &sync_folder,
         &state.hostname,
         &state.config,
-        &mut state.last_beat,
-        &mut state.last_text_written,
-        &mut state.last_image_sha256_written,
-        &state.last_text_read,
-        &state.last_image_sha256_read,
-        &state.last_file_paths_read,
+        &mut state.dedup,
     );
 
     if sent {
@@ -747,14 +732,7 @@ fn handle_clipboard_file_ready(
     );
 
     if let Some(parsed) = parsed {
-        let received = read_clipboard_from_file(
-            &parsed,
-            &state.config,
-            &mut state.last_beat,
-            &mut state.last_text_read,
-            &mut state.last_image_sha256_read,
-            &mut state.last_file_paths_read,
-        );
+        let received = read_clipboard_from_file(&parsed, &state.config, &mut state.dedup);
 
         if received {
             set_icon_for_duration(state, tray_icon_handle, proxy, TrayIconState::Received);
