@@ -411,6 +411,7 @@ dependencies = [
 name = "clipboard-sync"
 version = "0.0.0-development"
 dependencies = [
+ "anyhow",
  "auto-launch",
  "clipboard-rs",
  "faccess",

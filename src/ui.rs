@@ -38,7 +38,7 @@ pub fn build_tray_menu(
     let menu = Menu::new();
     let mut actions: HashMap<MenuId, MenuAction> = HashMap::new();
 
-    // ── Clipboard ──────────────────────────────────────────────────────────
+    // Clipboard section
     menu.append(&MenuItem::new("Clipboard", false, None))
         .unwrap();
 
@@ -68,7 +68,7 @@ pub fn build_tray_menu(
 
     menu.append(&PredefinedMenuItem::separator()).unwrap();
 
-    // ── Sync ───────────────────────────────────────────────────────────────
+    // Sync section
     menu.append(&MenuItem::new("Sync", false, None)).unwrap();
 
     let change_folder = MenuItem::new("Change sync folder...", true, None);
@@ -86,7 +86,7 @@ pub fn build_tray_menu(
 
     menu.append(&PredefinedMenuItem::separator()).unwrap();
 
-    // ── Preferences ────────────────────────────────────────────────────────
+    // Preferences section
     menu.append(&MenuItem::new("Preferences", false, None))
         .unwrap();
 
@@ -131,7 +131,7 @@ pub fn build_tray_menu(
 
     menu.append(&PredefinedMenuItem::separator()).unwrap();
 
-    // ── Troubleshooting ────────────────────────────────────────────────────
+    // Troubleshooting section
     menu.append(&MenuItem::new("Troubleshooting", false, None))
         .unwrap();
 
@@ -154,14 +154,13 @@ pub fn build_tray_menu(
         menu.append(&restart_od).unwrap();
     }
 
+    // Update section
     menu.append(&PredefinedMenuItem::separator()).unwrap();
 
-    // GitHub
     let github_item = MenuItem::new("GitHub...", true, None);
     actions.insert(github_item.id().clone(), MenuAction::OpenGitHub);
     menu.append(&github_item).unwrap();
 
-    // Check for updates
     let update_label = if update_info.is_some() {
         "Download update..."
     } else {
@@ -171,9 +170,9 @@ pub fn build_tray_menu(
     actions.insert(update_item.id().clone(), MenuAction::CheckForUpdates);
     menu.append(&update_item).unwrap();
 
+    // Quit section
     menu.append(&PredefinedMenuItem::separator()).unwrap();
 
-    // Quit
     let quit_item = MenuItem::new("Quit", true, None);
     actions.insert(quit_item.id().clone(), MenuAction::Quit);
     menu.append(&quit_item).unwrap();

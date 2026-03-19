@@ -16,6 +16,7 @@ name = "ClipboardSync"
 path = "src/main.rs"
 
 [dependencies]
+anyhow = "1.0.102"
 auto-launch = "0.6.0"
 clipboard-rs = "0.3.3"
 faccess = "0.2.4"

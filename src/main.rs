@@ -25,9 +25,10 @@ use crate::types::*;
 use crate::ui::{MenuAction, build_tray_menu};
 use crate::update::UpdateInfo;
 use crate::utils::{
-    get_executable_directory, get_executable_path, get_hostname, open_path, open_url,
+    get_executable_directory, get_executable_path_str, get_hostname, open_path, open_url,
 };
 
+use anyhow::Context;
 use auto_launch::AutoLaunchBuilder;
 use clipboard_rs::{ClipboardHandler, ClipboardWatcher, ClipboardWatcherContext, WatcherShutdown};
 use faccess::PathExt;
@@ -145,9 +146,17 @@ fn get_tray_icon(state: TrayIconState) -> tray_icon::Icon {
 }
 
 fn main() {
+    if let Err(error) = run() {
+        eprintln!("Fatal error: {error:#}");
+        log::error!("Fatal error: {error:#}");
+        std::process::exit(1);
+    }
+}
+
+fn run() -> anyhow::Result<()> {
     let executable_directory = get_executable_directory();
 
-    init_platform(&executable_directory);
+    init_platform(&executable_directory)?;
 
     if !executable_directory.writable() {
         let error_title = "Clipboard Sync Directory Not Writable";
@@ -170,7 +179,7 @@ fn main() {
         WriteLogger::new(
             LevelFilter::Info,
             simplelog::Config::default(),
-            File::create(&log_path).expect("Failed to create log file"),
+            File::create(&log_path).context("failed to create log file")?,
         ),
         #[cfg(debug_assertions)]
         TermLogger::new(
@@ -181,7 +190,7 @@ fn main() {
         ),
     ];
 
-    CombinedLogger::init(loggers).expect("Failed to init logger");
+    CombinedLogger::init(loggers).context("failed to init logger")?;
 
     // Set panic hook to log panic info
     std::panic::set_hook(Box::new(|panic_info| {
@@ -189,7 +198,7 @@ fn main() {
     }));
 
     // Only allow one instance
-    let instance = SingleInstance::new(APP_UID).expect("Failed to create single instance");
+    let instance = SingleInstance::new(APP_UID).context("failed to create single instance")?;
     if !instance.is_single() {
         log::error!("Another instance is already running.");
         std::process::exit(1);
@@ -209,11 +218,15 @@ fn main() {
     // Set up a Win32 job object so all child processes are killed when we exit
     #[cfg(target_os = "windows")]
     let _job = {
-        let job = win32job::Job::create().expect("Failed to create Win32 job object");
-        let mut info = job.query_extended_limit_info().unwrap();
+        let job = win32job::Job::create().context("failed to create Win32 job object")?;
+        let mut info = job
+            .query_extended_limit_info()
+            .context("failed to query Win32 job limits")?;
         info.limit_kill_on_job_close();
-        job.set_extended_limit_info(&info).unwrap();
-        job.assign_current_process().unwrap();
+        job.set_extended_limit_info(&info)
+            .context("failed to set Win32 job limits")?;
+        job.assign_current_process()
+            .context("failed to assign process to Win32 job")?;
         job // keep alive for the lifetime of the process
     };
 
@@ -862,7 +875,7 @@ fn set_tray_tooltip(tray_icon_handle: &Option<tray_icon::TrayIcon>, status: &str
 }
 
 fn rebuild_menu(state: &mut AppState, tray_icon_handle: &Option<tray_icon::TrayIcon>) {
-    let app_path = get_executable_path().to_str().unwrap().to_string();
+    let app_path = get_executable_path_str();
     let auto_launch = AutoLaunchBuilder::new()
         .set_app_name(APP_NAME)
         .set_app_path(&app_path)
@@ -883,6 +896,11 @@ fn rebuild_menu(state: &mut AppState, tray_icon_handle: &Option<tray_icon::TrayI
     if let Some(handle) = tray_icon_handle {
         handle.set_menu(Some(Box::new(new_menu)));
     }
+}
+
+fn save_config_and_reload(config: &Config, proxy: &tao::event_loop::EventLoopProxy<UserEvent>) {
+    save_config(config);
+    let _ = proxy.send_event(UserEvent::Reload);
 }
 
 fn handle_menu_event(
@@ -919,56 +937,46 @@ fn handle_menu_event(
     match action {
         MenuAction::ToggleSendTexts => {
             state.config.send_texts = !state.config.send_texts;
-            save_config(&state.config);
-            let _ = proxy.send_event(UserEvent::Reload);
+            save_config_and_reload(&state.config, proxy);
         }
         MenuAction::ToggleSendImages => {
             state.config.send_images = !state.config.send_images;
-            save_config(&state.config);
-            let _ = proxy.send_event(UserEvent::Reload);
+            save_config_and_reload(&state.config, proxy);
         }
         MenuAction::ToggleSendFiles => {
             state.config.send_files = !state.config.send_files;
-            save_config(&state.config);
-            let _ = proxy.send_event(UserEvent::Reload);
+            save_config_and_reload(&state.config, proxy);
         }
         MenuAction::ToggleReceiveTexts => {
             state.config.receive_texts = !state.config.receive_texts;
-            save_config(&state.config);
-            let _ = proxy.send_event(UserEvent::Reload);
+            save_config_and_reload(&state.config, proxy);
         }
         MenuAction::ToggleReceiveImages => {
             state.config.receive_images = !state.config.receive_images;
-            save_config(&state.config);
-            let _ = proxy.send_event(UserEvent::Reload);
+            save_config_and_reload(&state.config, proxy);
         }
         MenuAction::ToggleReceiveFiles => {
             state.config.receive_files = !state.config.receive_files;
-            save_config(&state.config);
-            let _ = proxy.send_event(UserEvent::Reload);
+            save_config_and_reload(&state.config, proxy);
         }
         MenuAction::SetWatchModeNative => {
             state.config.watch_mode = WatchMode::Native;
-            save_config(&state.config);
-            let _ = proxy.send_event(UserEvent::Reload);
+            save_config_and_reload(&state.config, proxy);
         }
         MenuAction::SetWatchModePolling => {
             state.config.watch_mode = WatchMode::Polling;
-            save_config(&state.config);
-            let _ = proxy.send_event(UserEvent::Reload);
+            save_config_and_reload(&state.config, proxy);
         }
         MenuAction::ToggleAutoCleanup => {
             state.config.auto_cleanup = !state.config.auto_cleanup;
-            save_config(&state.config);
-            let _ = proxy.send_event(UserEvent::Reload);
+            save_config_and_reload(&state.config, proxy);
         }
         MenuAction::ToggleCheckUpdatesOnLaunch => {
             state.config.check_updates_on_launch = !state.config.check_updates_on_launch;
-            save_config(&state.config);
-            let _ = proxy.send_event(UserEvent::Reload);
+            save_config_and_reload(&state.config, proxy);
         }
         MenuAction::ToggleAutoStart => {
-            let app_path = get_executable_path().to_str().unwrap().to_string();
+            let app_path = get_executable_path_str();
             let auto_launch = AutoLaunchBuilder::new()
                 .set_app_name(APP_NAME)
                 .set_app_path(&app_path)
@@ -997,16 +1005,14 @@ fn handle_menu_event(
                 default,
             ) {
                 state.config.sync_command = cmd;
-                save_config(&state.config);
-                let _ = proxy.send_event(UserEvent::Reload);
+                save_config_and_reload(&state.config, proxy);
             }
         }
         MenuAction::ChangeFolder => {
             if let Some(folder) = pick_folder() {
                 state.config.folder = Some(folder.clone());
                 state.sync_folder = Some(PathBuf::from(&folder));
-                save_config(&state.config);
-                let _ = proxy.send_event(UserEvent::Reload);
+                save_config_and_reload(&state.config, proxy);
             }
         }
         MenuAction::OpenSyncFolder => {

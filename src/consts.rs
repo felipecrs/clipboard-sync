@@ -3,10 +3,11 @@ pub const APP_AUMID: &str = "FelipeSantos.ClipboardSync";
 pub const APP_UID: &str = "72812af2-6bcc-40d9-b35d-0b43e72ac346";
 pub const CONFIG_FILE_NAME: &str = "ClipboardSyncConfig.json";
 pub const LOG_FILE_NAME: &str = "ClipboardSync.log";
-pub const PNG_ICON_BYTES: &[u8] = include_bytes!("../resources/trayicons/png/working.png");
+pub const PNG_ICON_BYTES: &[u8] = include_bytes!("../resources/appicons/png/icon.png");
 pub const PNG_ICON_FILE_NAME: &str = "ClipboardSync.png";
 
 pub const GITHUB_REPO_URL: &str = "https://github.com/felipecrs/clipboard-sync";
+pub const GITHUB_RELEASE_ASSET: &str = "ClipboardSync.exe";
 pub const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Suffix for "is-receiving" marker files.

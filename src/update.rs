@@ -1,4 +1,5 @@
-use crate::consts::{CURRENT_VERSION, GITHUB_REPO_URL};
+use crate::consts::{CURRENT_VERSION, GITHUB_RELEASE_ASSET, GITHUB_REPO_URL};
+use anyhow::Context;
 use semver::Version;
 use ureq::config::Config;
 use ureq::tls::{RootCerts, TlsConfig, TlsProvider};
@@ -24,7 +25,7 @@ pub struct UpdateInfo {
     pub release_url: String,
 }
 
-fn check_for_updates() -> Result<Option<UpdateInfo>, Box<dyn std::error::Error>> {
+fn check_for_updates() -> anyhow::Result<Option<UpdateInfo>> {
     log::info!("Checking for updates...");
 
     let agent = create_agent();
@@ -35,7 +36,7 @@ fn check_for_updates() -> Result<Option<UpdateInfo>, Box<dyn std::error::Error>>
     let latest_tag = release_url
         .rsplit('/')
         .next()
-        .ok_or("Could not extract version from redirect URL")?;
+        .context("could not extract version from redirect URL")?;
 
     let latest_version = latest_tag.trim_start_matches('v');
 
@@ -80,21 +81,20 @@ pub fn check(silent: bool) -> Option<UpdateInfo> {
     }
 }
 
-/// Get the download URL for the current platform.
+/// Get the update URL for the current platform.
+///
+/// Direct asset download is only supported on Windows for now.
 pub fn get_download_url(info: &UpdateInfo) -> String {
     let version = &info.latest_version;
     let base = format!("{GITHUB_REPO_URL}/releases/download/v{version}");
 
     #[cfg(target_os = "windows")]
     {
-        format!("{base}/Clipboard.Sync-{version}.Setup.exe")
+        format!("{base}/{GITHUB_RELEASE_ASSET}")
     }
-    #[cfg(target_os = "macos")]
+
+    #[cfg(not(target_os = "windows"))]
     {
-        format!("{base}/Clipboard.Sync-{version}-x64.dmg")
-    }
-    #[cfg(target_os = "linux")]
-    {
-        format!("{GITHUB_REPO_URL}/releases")
+        info.release_url.clone()
     }
 }

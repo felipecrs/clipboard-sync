@@ -64,8 +64,15 @@ fn get_config_file_path() -> PathBuf {
 }
 
 pub fn save_config(config: &Config) {
-    if let Ok(json) = serde_json::to_string_pretty(config) {
-        let _ = fs::write(get_config_file_path(), json);
+    match serde_json::to_string_pretty(config) {
+        Ok(json) => {
+            if let Err(error) = fs::write(get_config_file_path(), json) {
+                log::error!("Failed to write config file: {error}");
+            }
+        }
+        Err(error) => {
+            log::error!("Failed to serialize config: {error}");
+        }
     }
 }
 

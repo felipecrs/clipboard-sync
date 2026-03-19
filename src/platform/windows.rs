@@ -5,20 +5,24 @@ use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
 use windows::core::{HSTRING, Result};
 use windows_registry::CURRENT_USER;
 
-pub fn init_platform(executable_directory: &Path) {
-    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).unwrap() };
-    let _ = setup_app_aumid(executable_directory);
+pub fn init_platform(executable_directory: &Path) -> anyhow::Result<()> {
+    unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()? };
+    if let Err(error) = setup_app_aumid(executable_directory) {
+        log::warn!("Failed to set up app AUMID: {error}");
+    }
+    Ok(())
 }
 
 fn setup_app_aumid(executable_directory: &Path) -> Result<()> {
     let registry_path = format!(r"SOFTWARE\Classes\AppUserModelId\{APP_AUMID}");
     let _ = CURRENT_USER.remove_tree(registry_path.clone());
-    let key = CURRENT_USER.create(registry_path.clone()).unwrap();
+    let key = CURRENT_USER.create(&registry_path)?;
     let _ = key.set_string("DisplayName", APP_NAME);
 
+    // We need an icon file for the AUMID to work properly
     let png_path = executable_directory.join(PNG_ICON_FILE_NAME);
-    if let Err(e) = std::fs::write(&png_path, PNG_ICON_BYTES) {
-        log::warn!("Failed to write {PNG_ICON_FILE_NAME} icon: {e}");
+    if let Err(error) = std::fs::write(&png_path, PNG_ICON_BYTES) {
+        log::warn!("Failed to write {PNG_ICON_FILE_NAME} icon: {error}");
         let _ = key.remove_value("IconUri");
     } else {
         let _ = key.set_hstring("IconUri", &png_path.as_path().into());
