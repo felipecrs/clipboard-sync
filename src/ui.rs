@@ -14,7 +14,6 @@ pub enum MenuAction {
     ToggleReceiveFiles,
     SetWatchModeNative,
     SetWatchModePolling,
-    SetWatchModePollingHarder,
     ToggleAutoCleanup,
     ToggleCheckUpdatesOnLaunch,
     ToggleAutoStart,
@@ -104,17 +103,6 @@ pub fn build_tray_menu(
     );
     actions.insert(wm_polling.id().clone(), MenuAction::SetWatchModePolling);
     watch_submenu.append(&wm_polling).unwrap();
-    let wm_polling_harder = CheckMenuItem::new(
-        "Polling harder",
-        true,
-        config.watch_mode == WatchMode::PollingHarder,
-        None,
-    );
-    actions.insert(
-        wm_polling_harder.id().clone(),
-        MenuAction::SetWatchModePollingHarder,
-    );
-    watch_submenu.append(&wm_polling_harder).unwrap();
     menu.append(&watch_submenu).unwrap();
 
     let auto_clean = CheckMenuItem::new("Auto-clean", true, config.auto_cleanup, None);

@@ -91,8 +91,6 @@ pub enum UserEvent {
     CheckIdleState,
     /// Time to check sync command health.
     CheckSyncCommand,
-    /// Time to do a PollingHarder scan.
-    PollHarderScan,
     /// Auto update check completed.
     UpdateCheckComplete(Option<UpdateInfo>),
     /// Manual (user-initiated) update check completed.

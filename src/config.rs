@@ -12,7 +12,6 @@ pub enum WatchMode {
     #[default]
     Native,
     Polling,
-    PollingHarder,
 }
 
 /// Persistent application configuration.

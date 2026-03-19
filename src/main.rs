@@ -377,16 +377,6 @@ fn main() {
                 handle_sync_command_check(&mut state, &tray_icon_handle);
             }
 
-            Event::UserEvent(UserEvent::PollHarderScan) => {
-                if state.initialized
-                    && state.config.watch_mode == WatchMode::PollingHarder
-                    && let Some(ref sf) = state.sync_folder
-                {
-                    let sf = sf.clone();
-                    poll_harder_scan(&mut state, &sf, &main_proxy, &tray_icon_handle);
-                }
-            }
-
             Event::UserEvent(UserEvent::UpdateCheckComplete(info)) => {
                 state.update_info = info;
                 rebuild_menu(&mut state, &tray_icon_handle);
@@ -502,9 +492,7 @@ fn initialize(
         log::info!("Starting file watcher...");
         log::info!("Watch mode: {:?}", watch_mode);
 
-        if watch_mode != WatchMode::PollingHarder {
-            start_fs_watcher(state, proxy, &sync_folder, &watch_mode);
-        }
+        start_fs_watcher(state, proxy, &sync_folder, &watch_mode);
 
         // Write the initial keep-alive file
         log::info!("Writing keep-alive file...");
@@ -518,17 +506,6 @@ fn initialize(
                 let _ = p.send_event(UserEvent::KeepAlive);
             }
         }));
-
-        // Spawn PollingHarder scan task if needed
-        if watch_mode == WatchMode::PollingHarder {
-            let p = proxy.clone();
-            state.init_tasks.push(EXECUTOR.spawn(async move {
-                loop {
-                    smol::Timer::after(Duration::from_secs(1)).await;
-                    let _ = p.send_event(UserEvent::PollHarderScan);
-                }
-            }));
-        }
     }
 
     // Initial auto-cleanup + periodic cleanup task
@@ -836,70 +813,6 @@ fn handle_sync_command_check(state: &mut AppState, tray_icon_handle: &Option<tra
     }
 }
 
-/// PollingHarder mode: scan the sync folder for the most recent clipboard file
-/// from other machines and process it if it's new.
-fn poll_harder_scan(
-    state: &mut AppState,
-    sync_folder: &Path,
-    proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
-    tray_icon_handle: &Option<tray_icon::TrayIcon>,
-) {
-    let entries = match std::fs::read_dir(sync_folder) {
-        Ok(e) => e,
-        Err(e) => {
-            log::error!("PollingHarder: Error reading sync folder: {e}");
-            return;
-        }
-    };
-
-    let now = now_ms();
-
-    // Collect all clipboard files from others
-    let mut candidates: Vec<ParsedClipboardFile> = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if let Some(parsed) = parse_clipboard_filename(
-            &path,
-            sync_folder,
-            &state.hostname,
-            Some(ClipboardOrigin::Others),
-        ) {
-            candidates.push(parsed);
-        }
-    }
-
-    // Pick the most recent one
-    candidates.sort_by_key(|f| f.beat);
-    let Some(file) = candidates.pop() else {
-        return;
-    };
-
-    // Skip files older than 15 seconds (avoids reading existing files on startup)
-    if now.saturating_sub(file.beat) > DUPLICATE_WINDOW_MS {
-        return;
-    }
-
-    // Skip already-processed beats
-    if let Some(last) = state.last_beat
-        && file.beat <= last
-    {
-        return;
-    }
-
-    let received = read_clipboard_from_file(
-        &file,
-        &state.config,
-        &mut state.last_beat,
-        &mut state.last_text_read,
-        &mut state.last_image_sha256_read,
-        &mut state.last_file_paths_read,
-    );
-
-    if received {
-        set_icon_for_duration(state, tray_icon_handle, proxy, TrayIconState::Received);
-    }
-}
-
 fn check_idle_state(
     state: &mut AppState,
     proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
@@ -1010,7 +923,6 @@ fn handle_menu_event(
         Some(MenuAction::ToggleReceiveFiles) => MenuAction::ToggleReceiveFiles,
         Some(MenuAction::SetWatchModeNative) => MenuAction::SetWatchModeNative,
         Some(MenuAction::SetWatchModePolling) => MenuAction::SetWatchModePolling,
-        Some(MenuAction::SetWatchModePollingHarder) => MenuAction::SetWatchModePollingHarder,
         Some(MenuAction::ToggleAutoCleanup) => MenuAction::ToggleAutoCleanup,
         Some(MenuAction::ToggleCheckUpdatesOnLaunch) => MenuAction::ToggleCheckUpdatesOnLaunch,
         Some(MenuAction::ToggleAutoStart) => MenuAction::ToggleAutoStart,
@@ -1064,11 +976,6 @@ fn handle_menu_event(
         }
         MenuAction::SetWatchModePolling => {
             state.config.watch_mode = WatchMode::Polling;
-            save_config(&state.config);
-            let _ = proxy.send_event(UserEvent::Reload);
-        }
-        MenuAction::SetWatchModePollingHarder => {
-            state.config.watch_mode = WatchMode::PollingHarder;
             save_config(&state.config);
             let _ = proxy.send_event(UserEvent::Reload);
         }
