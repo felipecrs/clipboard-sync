@@ -22,7 +22,7 @@ use crate::consts::*;
 use crate::platform::{NotificationDuration, init_platform, send_notification};
 use crate::sync_command::SyncCommand;
 use crate::types::*;
-use crate::ui::{MenuAction, build_tray_menu};
+use crate::ui::{MenuAction, rebuild_tray_menu};
 use crate::update::UpdateInfo;
 use crate::utils::{
     get_executable_directory, get_executable_path_str, get_hostname, open_path, open_url,
@@ -42,7 +42,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tao::event::Event;
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
-use tray_icon::menu::{MenuEvent, MenuId};
+use tray_icon::menu::{Menu, MenuEvent, MenuId};
 use tray_icon::{TrayIconBuilder, TrayIconEvent};
 
 /// Global async executor for background tasks.
@@ -99,6 +99,9 @@ struct AppState {
     // Folder check timing (dynamic interval)
     last_folder_check: Option<Instant>,
     sync_command_started_at: Option<Instant>,
+
+    // Tray menu (kept alive; rebuilt in place when state changes)
+    tray_menu: Menu,
 
     // Menu action map
     menu_actions: HashMap<MenuId, MenuAction>,
@@ -244,7 +247,8 @@ fn run() -> anyhow::Result<()> {
     MenuEvent::receiver();
 
     // Build initial menu (auto-launch status will be checked when initializing)
-    let (tray_menu, menu_actions) = build_tray_menu(&config, false, &None, &config.folder);
+    let tray_menu = Menu::new();
+    let menu_actions = rebuild_tray_menu(&tray_menu, &config, false, &None);
 
     let mut tray_icon_handle = None;
 
@@ -264,6 +268,7 @@ fn run() -> anyhow::Result<()> {
         suspended_by_idle: false,
         last_folder_check: None,
         sync_command_started_at: None,
+        tray_menu,
         menu_actions,
         init_tasks: Vec::new(),
         icon_revert_task: None,
@@ -283,7 +288,7 @@ fn run() -> anyhow::Result<()> {
                 let tooltip = format!("{APP_NAME} v{CURRENT_VERSION}");
                 tray_icon_handle = Some(
                     TrayIconBuilder::new()
-                        .with_menu(Box::new(tray_menu.clone()))
+                        .with_menu(Box::new(state.tray_menu.clone()))
                         .with_tooltip(&tooltip)
                         .with_icon(get_tray_icon(TrayIconState::Suspended))
                         .with_id(APP_UID)
@@ -382,11 +387,11 @@ fn run() -> anyhow::Result<()> {
 
             Event::UserEvent(UserEvent::UpdateCheckComplete(info)) => {
                 state.update_info = info;
-                rebuild_menu(&mut state, &tray_icon_handle);
+                rebuild_menu(&mut state);
             }
 
             Event::UserEvent(UserEvent::ManualUpdateCheckComplete(info)) => {
-                handle_manual_update_result(&mut state, info, &tray_icon_handle);
+                handle_manual_update_result(&mut state, info);
             }
 
             _ => {}
@@ -454,6 +459,7 @@ fn initialize(
         None => {
             log::warn!("No sync folder configured.");
             set_tray_tooltip(tray_icon_handle, "Please set a sync folder");
+            rebuild_menu(state);
             return;
         }
     };
@@ -528,7 +534,7 @@ fn initialize(
     state.initialized = true;
     update_tray_icon(state, tray_icon_handle, TrayIconState::Working);
     set_tray_tooltip(tray_icon_handle, "");
-    rebuild_menu(state, tray_icon_handle);
+    rebuild_menu(state);
     log::info!("Clipboard Sync initialized successfully.");
 }
 
@@ -874,7 +880,7 @@ fn set_tray_tooltip(tray_icon_handle: &Option<tray_icon::TrayIcon>, status: &str
     }
 }
 
-fn rebuild_menu(state: &mut AppState, tray_icon_handle: &Option<tray_icon::TrayIcon>) {
+fn rebuild_menu(state: &mut AppState) {
     let app_path = get_executable_path_str();
     let auto_launch = AutoLaunchBuilder::new()
         .set_app_name(APP_NAME)
@@ -884,18 +890,16 @@ fn rebuild_menu(state: &mut AppState, tray_icon_handle: &Option<tray_icon::TrayI
 
     state.auto_launch_enabled = auto_launch.is_enabled().unwrap_or(false);
 
-    let (new_menu, new_actions) = build_tray_menu(
-        &state.config,
-        state.auto_launch_enabled,
-        &state.update_info,
-        &state.config.folder,
-    );
-
+    let new_actions = {
+        let auto_launch_enabled = state.auto_launch_enabled;
+        rebuild_tray_menu(
+            &state.tray_menu,
+            &state.config,
+            auto_launch_enabled,
+            &state.update_info,
+        )
+    };
     state.menu_actions = new_actions;
-
-    if let Some(handle) = tray_icon_handle {
-        handle.set_menu(Some(Box::new(new_menu)));
-    }
 }
 
 fn save_config_and_reload(config: &Config, proxy: &tao::event_loop::EventLoopProxy<UserEvent>) {
@@ -990,7 +994,7 @@ fn handle_menu_event(
                 let _ = auto_launch.disable();
             }
             state.auto_launch_enabled = new_state;
-            rebuild_menu(state, tray_icon_handle);
+            rebuild_menu(state);
         }
         MenuAction::SetSyncCommand => {
             let current = &state.config.sync_command;
@@ -1056,11 +1060,7 @@ fn handle_menu_event(
     }
 }
 
-fn handle_manual_update_result(
-    state: &mut AppState,
-    info: Option<UpdateInfo>,
-    tray_icon_handle: &Option<tray_icon::TrayIcon>,
-) {
+fn handle_manual_update_result(state: &mut AppState, info: Option<UpdateInfo>) {
     if let Some(info) = info {
         let download_url = crate::update::get_download_url(&info);
         let _ = send_notification(
@@ -1073,7 +1073,7 @@ fn handle_manual_update_result(
         );
         open_url(&download_url);
         state.update_info = Some(info);
-        rebuild_menu(state, tray_icon_handle);
+        rebuild_menu(state);
     } else {
         let _ = send_notification(
             "No updates found",
