@@ -1,3 +1,4 @@
+use crate::platform::{NotificationDuration, send_notification};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use walkdir::WalkDir;
@@ -19,6 +20,11 @@ pub fn get_executable_path_str() -> String {
         .to_str()
         .expect("executable path is not valid UTF-8")
         .to_string()
+}
+
+pub fn log_and_notify_error(title: &str, message: &str) {
+    log::error!("{message}");
+    let _ = send_notification(title, message, NotificationDuration::Long);
 }
 
 /// Get the hostname of this machine (first part before any dot).

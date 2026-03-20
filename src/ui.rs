@@ -1,6 +1,9 @@
 use crate::config::{Config, WatchMode};
+use crate::consts::GITHUB_REPO_URL;
 use crate::update::UpdateInfo;
+use crate::utils::{get_executable_directory, open_path, open_url};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use tray_icon::menu::{CheckMenuItem, Menu, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 
 /// Identifies what a menu item does when clicked.
@@ -24,8 +27,163 @@ pub enum MenuAction {
     RestartOneDrive,
     Reinitialize,
     CheckForUpdates,
+    PerformUpdate,
     OpenGitHub,
     Quit,
+}
+
+pub enum UpdateAction {
+    None,
+    Check,
+    Perform(UpdateInfo),
+}
+
+pub struct MenuEventResult {
+    pub save_and_reload: bool,
+    pub rebuild_menu: bool,
+    pub quit: bool,
+    pub update_action: UpdateAction,
+    pub restart_onedrive: bool,
+}
+
+/// Handle a menu event and return the result for the main event loop to act on.
+pub fn handle_menu_event(
+    menu_id: &MenuId,
+    menu_actions: &HashMap<MenuId, MenuAction>,
+    config: &mut Config,
+    sync_folder: &Option<PathBuf>,
+    auto_launch_enabled: &mut bool,
+    update_info: &Option<UpdateInfo>,
+) -> MenuEventResult {
+    let mut result = MenuEventResult {
+        save_and_reload: false,
+        rebuild_menu: false,
+        quit: false,
+        update_action: UpdateAction::None,
+        restart_onedrive: false,
+    };
+
+    let action = match menu_actions.get(menu_id) {
+        Some(a) => a,
+        None => return result,
+    };
+
+    match action {
+        MenuAction::ToggleSendTexts => {
+            config.send_texts = !config.send_texts;
+            result.save_and_reload = true;
+        }
+        MenuAction::ToggleSendImages => {
+            config.send_images = !config.send_images;
+            result.save_and_reload = true;
+        }
+        MenuAction::ToggleSendFiles => {
+            config.send_files = !config.send_files;
+            result.save_and_reload = true;
+        }
+        MenuAction::ToggleReceiveTexts => {
+            config.receive_texts = !config.receive_texts;
+            result.save_and_reload = true;
+        }
+        MenuAction::ToggleReceiveImages => {
+            config.receive_images = !config.receive_images;
+            result.save_and_reload = true;
+        }
+        MenuAction::ToggleReceiveFiles => {
+            config.receive_files = !config.receive_files;
+            result.save_and_reload = true;
+        }
+        MenuAction::SetWatchModeNative => {
+            config.watch_mode = WatchMode::Native;
+            result.save_and_reload = true;
+        }
+        MenuAction::SetWatchModePolling => {
+            config.watch_mode = WatchMode::Polling;
+            result.save_and_reload = true;
+        }
+        MenuAction::ToggleAutoCleanup => {
+            config.auto_cleanup = !config.auto_cleanup;
+            result.save_and_reload = true;
+        }
+        MenuAction::ToggleCheckUpdatesOnLaunch => {
+            config.check_updates_on_launch = !config.check_updates_on_launch;
+            result.save_and_reload = true;
+        }
+        MenuAction::ToggleAutoStart => {
+            let app_path = crate::utils::get_executable_path_str();
+            let auto_launch = auto_launch::AutoLaunchBuilder::new()
+                .set_app_name(crate::consts::APP_NAME)
+                .set_app_path(&app_path)
+                .build()
+                .expect("Failed to build auto launch");
+
+            let new_state = !*auto_launch_enabled;
+            if new_state {
+                let _ = auto_launch.enable();
+            } else {
+                let _ = auto_launch.disable();
+            }
+            *auto_launch_enabled = new_state;
+            result.rebuild_menu = true;
+        }
+        MenuAction::SetSyncCommand => {
+            let current = &config.sync_command;
+            let default = if current.is_empty() {
+                ""
+            } else {
+                current.as_str()
+            };
+            if let Some(cmd) = tinyfiledialogs::input_box(
+                "Sync command",
+                "Enter a command to run before syncing (leave empty to disable):",
+                default,
+            ) {
+                config.sync_command = cmd;
+                result.save_and_reload = true;
+            }
+        }
+        MenuAction::ChangeFolder => {
+            if let Some(folder) = pick_folder() {
+                config.folder = Some(folder);
+                result.save_and_reload = true;
+            }
+        }
+        MenuAction::OpenSyncFolder => {
+            if let Some(folder) = sync_folder {
+                open_path(folder);
+            }
+        }
+        MenuAction::OpenAppFolder => {
+            open_path(&get_executable_directory());
+        }
+        MenuAction::Reinitialize => {
+            result.save_and_reload = true;
+        }
+        MenuAction::RestartOneDrive => {
+            result.restart_onedrive = true;
+        }
+        MenuAction::CheckForUpdates => {
+            result.update_action = UpdateAction::Check;
+        }
+        MenuAction::PerformUpdate => {
+            if let Some(info) = update_info {
+                result.update_action = UpdateAction::Perform(info.clone());
+            }
+        }
+        MenuAction::OpenGitHub => {
+            open_url(GITHUB_REPO_URL);
+        }
+        MenuAction::Quit => {
+            result.quit = true;
+        }
+    }
+
+    result
+}
+
+/// Pick a folder using a cross-platform dialog.
+fn pick_folder() -> Option<String> {
+    tinyfiledialogs::select_folder_dialog("Select folder to save and read clipboard files", "")
 }
 
 /// Rebuild the tray context menu in place, returning a mapping of MenuId -> MenuAction.
@@ -170,13 +328,15 @@ pub fn rebuild_tray_menu(
     actions.insert(github_item.id().clone(), MenuAction::OpenGitHub);
     tray_menu.append(&github_item).unwrap();
 
-    let update_label = if update_info.is_some() {
-        "Download update..."
-    } else {
-        "Check for updates"
+    let (update_label, update_action) = match update_info {
+        Some(info) => (
+            format!("Update to {}...", info.latest_version),
+            MenuAction::PerformUpdate,
+        ),
+        None => ("Check for updates".to_string(), MenuAction::CheckForUpdates),
     };
-    let update_item = MenuItem::new(update_label, true, None);
-    actions.insert(update_item.id().clone(), MenuAction::CheckForUpdates);
+    let update_item = MenuItem::new(&update_label, true, None);
+    actions.insert(update_item.id().clone(), update_action);
     tray_menu.append(&update_item).unwrap();
 
     // Quit section

@@ -93,6 +93,4 @@ pub enum UserEvent {
     CheckSyncCommand,
     /// Auto update check completed.
     UpdateCheckComplete(Option<UpdateInfo>),
-    /// Manual (user-initiated) update check completed.
-    ManualUpdateCheckComplete(Option<UpdateInfo>),
 }

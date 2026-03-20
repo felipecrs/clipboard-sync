@@ -22,11 +22,9 @@ use crate::consts::*;
 use crate::platform::{NotificationDuration, init_platform, send_notification};
 use crate::sync_command::SyncCommand;
 use crate::types::*;
-use crate::ui::{MenuAction, rebuild_tray_menu};
+use crate::ui::{MenuAction, UpdateAction, rebuild_tray_menu};
 use crate::update::UpdateInfo;
-use crate::utils::{
-    get_executable_directory, get_executable_path_str, get_hostname, open_path, open_url,
-};
+use crate::utils::{get_executable_directory, get_executable_path_str, get_hostname};
 
 use anyhow::Context;
 use auto_launch::AutoLaunchBuilder;
@@ -301,7 +299,7 @@ fn run() -> anyhow::Result<()> {
                     let p = main_proxy.clone();
                     EXECUTOR
                         .spawn(async move {
-                            let info = smol::unblock(|| update::check(true)).await;
+                            let info = smol::unblock(|| update::check(false)).await;
                             let _ = p.send_event(UserEvent::UpdateCheckComplete(info));
                         })
                         .detach();
@@ -342,7 +340,57 @@ fn run() -> anyhow::Result<()> {
             }
 
             Event::UserEvent(UserEvent::Menu(menu_event)) => {
-                handle_menu_event(&menu_event.id, &mut state, &main_proxy, &tray_icon_handle);
+                let result = ui::handle_menu_event(
+                    &menu_event.id,
+                    &state.menu_actions,
+                    &mut state.config,
+                    &state.sync_folder,
+                    &mut state.auto_launch_enabled,
+                    &state.update_info,
+                );
+
+                if result.save_and_reload {
+                    // Sync folder may have changed via ChangeFolder action
+                    state.sync_folder = state.config.folder.as_ref().map(PathBuf::from);
+                    save_config(&state.config);
+                    let _ = main_proxy.send_event(UserEvent::Reload);
+                }
+
+                if result.rebuild_menu {
+                    rebuild_menu(&mut state);
+                }
+
+                if result.restart_onedrive {
+                    #[cfg(target_os = "windows")]
+                    {
+                        EXECUTOR
+                            .spawn(async {
+                                smol::unblock(crate::platform::restart_onedrive).await;
+                            })
+                            .detach();
+                    }
+                }
+
+                match result.update_action {
+                    UpdateAction::Check => {
+                        let p = main_proxy.clone();
+                        EXECUTOR
+                            .spawn(async move {
+                                let info = smol::unblock(|| update::check(true)).await;
+                                let _ = p.send_event(UserEvent::UpdateCheckComplete(info));
+                            })
+                            .detach();
+                    }
+                    UpdateAction::Perform(info) => {
+                        update::perform(&info);
+                    }
+                    UpdateAction::None => {}
+                }
+
+                if result.quit {
+                    uninitialize(&mut state, &tray_icon_handle, "Exiting...");
+                    std::process::exit(0);
+                }
             }
 
             Event::UserEvent(UserEvent::TrayIcon(_tray_event)) => {
@@ -388,10 +436,6 @@ fn run() -> anyhow::Result<()> {
             Event::UserEvent(UserEvent::UpdateCheckComplete(info)) => {
                 state.update_info = info;
                 rebuild_menu(&mut state);
-            }
-
-            Event::UserEvent(UserEvent::ManualUpdateCheckComplete(info)) => {
-                handle_manual_update_result(&mut state, info);
             }
 
             _ => {}
@@ -900,190 +944,4 @@ fn rebuild_menu(state: &mut AppState) {
         )
     };
     state.menu_actions = new_actions;
-}
-
-fn save_config_and_reload(config: &Config, proxy: &tao::event_loop::EventLoopProxy<UserEvent>) {
-    save_config(config);
-    let _ = proxy.send_event(UserEvent::Reload);
-}
-
-fn handle_menu_event(
-    menu_id: &MenuId,
-    state: &mut AppState,
-    proxy: &tao::event_loop::EventLoopProxy<UserEvent>,
-    tray_icon_handle: &Option<tray_icon::TrayIcon>,
-) {
-    // Clone the action to avoid borrowing issues
-    let action = match state.menu_actions.get(menu_id) {
-        Some(MenuAction::ToggleSendTexts) => MenuAction::ToggleSendTexts,
-        Some(MenuAction::ToggleSendImages) => MenuAction::ToggleSendImages,
-        Some(MenuAction::ToggleSendFiles) => MenuAction::ToggleSendFiles,
-        Some(MenuAction::ToggleReceiveTexts) => MenuAction::ToggleReceiveTexts,
-        Some(MenuAction::ToggleReceiveImages) => MenuAction::ToggleReceiveImages,
-        Some(MenuAction::ToggleReceiveFiles) => MenuAction::ToggleReceiveFiles,
-        Some(MenuAction::SetWatchModeNative) => MenuAction::SetWatchModeNative,
-        Some(MenuAction::SetWatchModePolling) => MenuAction::SetWatchModePolling,
-        Some(MenuAction::ToggleAutoCleanup) => MenuAction::ToggleAutoCleanup,
-        Some(MenuAction::ToggleCheckUpdatesOnLaunch) => MenuAction::ToggleCheckUpdatesOnLaunch,
-        Some(MenuAction::ToggleAutoStart) => MenuAction::ToggleAutoStart,
-        Some(MenuAction::SetSyncCommand) => MenuAction::SetSyncCommand,
-        Some(MenuAction::ChangeFolder) => MenuAction::ChangeFolder,
-        Some(MenuAction::OpenSyncFolder) => MenuAction::OpenSyncFolder,
-        Some(MenuAction::OpenAppFolder) => MenuAction::OpenAppFolder,
-        Some(MenuAction::Reinitialize) => MenuAction::Reinitialize,
-        Some(MenuAction::RestartOneDrive) => MenuAction::RestartOneDrive,
-        Some(MenuAction::CheckForUpdates) => MenuAction::CheckForUpdates,
-        Some(MenuAction::OpenGitHub) => MenuAction::OpenGitHub,
-        Some(MenuAction::Quit) => MenuAction::Quit,
-        None => return,
-    };
-
-    match action {
-        MenuAction::ToggleSendTexts => {
-            state.config.send_texts = !state.config.send_texts;
-            save_config_and_reload(&state.config, proxy);
-        }
-        MenuAction::ToggleSendImages => {
-            state.config.send_images = !state.config.send_images;
-            save_config_and_reload(&state.config, proxy);
-        }
-        MenuAction::ToggleSendFiles => {
-            state.config.send_files = !state.config.send_files;
-            save_config_and_reload(&state.config, proxy);
-        }
-        MenuAction::ToggleReceiveTexts => {
-            state.config.receive_texts = !state.config.receive_texts;
-            save_config_and_reload(&state.config, proxy);
-        }
-        MenuAction::ToggleReceiveImages => {
-            state.config.receive_images = !state.config.receive_images;
-            save_config_and_reload(&state.config, proxy);
-        }
-        MenuAction::ToggleReceiveFiles => {
-            state.config.receive_files = !state.config.receive_files;
-            save_config_and_reload(&state.config, proxy);
-        }
-        MenuAction::SetWatchModeNative => {
-            state.config.watch_mode = WatchMode::Native;
-            save_config_and_reload(&state.config, proxy);
-        }
-        MenuAction::SetWatchModePolling => {
-            state.config.watch_mode = WatchMode::Polling;
-            save_config_and_reload(&state.config, proxy);
-        }
-        MenuAction::ToggleAutoCleanup => {
-            state.config.auto_cleanup = !state.config.auto_cleanup;
-            save_config_and_reload(&state.config, proxy);
-        }
-        MenuAction::ToggleCheckUpdatesOnLaunch => {
-            state.config.check_updates_on_launch = !state.config.check_updates_on_launch;
-            save_config_and_reload(&state.config, proxy);
-        }
-        MenuAction::ToggleAutoStart => {
-            let app_path = get_executable_path_str();
-            let auto_launch = AutoLaunchBuilder::new()
-                .set_app_name(APP_NAME)
-                .set_app_path(&app_path)
-                .build()
-                .expect("Failed to build auto launch");
-
-            let new_state = !state.auto_launch_enabled;
-            if new_state {
-                let _ = auto_launch.enable();
-            } else {
-                let _ = auto_launch.disable();
-            }
-            state.auto_launch_enabled = new_state;
-            rebuild_menu(state);
-        }
-        MenuAction::SetSyncCommand => {
-            let current = &state.config.sync_command;
-            let default = if current.is_empty() {
-                ""
-            } else {
-                current.as_str()
-            };
-            if let Some(cmd) = tinyfiledialogs::input_box(
-                "Sync command",
-                "Enter a command to run before syncing (leave empty to disable):",
-                default,
-            ) {
-                state.config.sync_command = cmd;
-                save_config_and_reload(&state.config, proxy);
-            }
-        }
-        MenuAction::ChangeFolder => {
-            if let Some(folder) = pick_folder() {
-                state.config.folder = Some(folder.clone());
-                state.sync_folder = Some(PathBuf::from(&folder));
-                save_config_and_reload(&state.config, proxy);
-            }
-        }
-        MenuAction::OpenSyncFolder => {
-            if let Some(ref folder) = state.sync_folder {
-                open_path(folder);
-            }
-        }
-        MenuAction::OpenAppFolder => {
-            open_path(&get_executable_directory());
-        }
-        MenuAction::Reinitialize => {
-            let _ = proxy.send_event(UserEvent::Reload);
-        }
-        MenuAction::RestartOneDrive => {
-            #[cfg(target_os = "windows")]
-            {
-                EXECUTOR
-                    .spawn(async {
-                        smol::unblock(crate::platform::restart_onedrive).await;
-                    })
-                    .detach();
-            }
-        }
-        MenuAction::CheckForUpdates => {
-            // Async update check (non-blocking)
-            let p = proxy.clone();
-            EXECUTOR
-                .spawn(async move {
-                    let info = smol::unblock(|| update::check(false)).await;
-                    let _ = p.send_event(UserEvent::ManualUpdateCheckComplete(info));
-                })
-                .detach();
-        }
-        MenuAction::OpenGitHub => {
-            open_url(GITHUB_REPO_URL);
-        }
-        MenuAction::Quit => {
-            uninitialize(state, tray_icon_handle, "Exiting...");
-            std::process::exit(0);
-        }
-    }
-}
-
-fn handle_manual_update_result(state: &mut AppState, info: Option<UpdateInfo>) {
-    if let Some(info) = info {
-        let download_url = crate::update::get_download_url(&info);
-        let _ = send_notification(
-            "Update available",
-            &format!(
-                "v{} is available. Opening download page...",
-                info.latest_version
-            ),
-            NotificationDuration::Short,
-        );
-        open_url(&download_url);
-        state.update_info = Some(info);
-        rebuild_menu(state);
-    } else {
-        let _ = send_notification(
-            "No updates found",
-            "You are already running the latest version.",
-            NotificationDuration::Short,
-        );
-    }
-}
-
-/// Pick a folder using a cross-platform dialog.
-fn pick_folder() -> Option<String> {
-    tinyfiledialogs::select_folder_dialog("Select folder to save and read clipboard files", "")
 }

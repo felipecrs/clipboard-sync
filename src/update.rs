@@ -1,4 +1,6 @@
 use crate::consts::{CURRENT_VERSION, GITHUB_RELEASE_ASSET, GITHUB_REPO_URL};
+use crate::platform::{NotificationDuration, send_notification};
+use crate::utils::{get_executable_path_str, log_and_notify_error};
 use anyhow::Context;
 use semver::Version;
 use ureq::config::Config;
@@ -21,7 +23,7 @@ fn create_agent() -> Agent {
 #[derive(Debug, Clone)]
 pub struct UpdateInfo {
     pub latest_version: String,
-    #[allow(dead_code)]
+    pub download_url: String,
     pub release_url: String,
 }
 
@@ -42,59 +44,116 @@ fn check_for_updates() -> anyhow::Result<Option<UpdateInfo>> {
 
     log::info!("Current: {CURRENT_VERSION}, Latest: {latest_version}");
 
-    // Development version should not attempt to update
-    if CURRENT_VERSION == "0.0.0-development" {
-        log::info!("Development version, skipping update check.");
-        return Ok(None);
-    }
-
-    let current = Version::parse(CURRENT_VERSION)?;
-    let latest = Version::parse(latest_version)?;
-
-    if latest > current {
+    // Compare versions - if parsing fails, assume no update available
+    if Version::parse(latest_version).ok() > Version::parse(CURRENT_VERSION).ok() {
         Ok(Some(UpdateInfo {
             latest_version: latest_version.to_string(),
-            release_url: release_url.to_string(),
+            download_url: format!(
+                "{GITHUB_REPO_URL}/releases/download/{latest_tag}/{GITHUB_RELEASE_ASSET}"
+            ),
+            release_url,
         }))
     } else {
         Ok(None)
     }
 }
 
-/// Check for updates. If `silent` is true, don't log the "no update" case.
-pub fn check(silent: bool) -> Option<UpdateInfo> {
+/// Checks for updates and optionally notifies the user.
+/// If `manual_request` is true, shows notifications for all outcomes.
+/// If `manual_request` is false, only logs when update is available.
+pub fn check(manual_request: bool) -> Option<UpdateInfo> {
     match check_for_updates() {
         Ok(Some(info)) => {
             log::info!("Update available: v{}", info.latest_version);
+            if manual_request {
+                let _ = send_notification(
+                    "Update Available",
+                    &format!(
+                        "Version {} is available. Click 'Update' in the menu to install.",
+                        info.latest_version
+                    ),
+                    NotificationDuration::Long,
+                );
+            }
             Some(info)
         }
         Ok(None) => {
-            if !silent {
-                log::info!("No updates available.");
+            log::info!("No updates available");
+            if manual_request {
+                let _ = send_notification(
+                    "No Updates Available",
+                    "You are running the latest version of Clipboard Sync.",
+                    NotificationDuration::Short,
+                );
             }
             None
         }
         Err(e) => {
-            log::error!("Failed to check for updates: {e}");
+            if manual_request {
+                log_and_notify_error(
+                    "Update Check Failed",
+                    &format!("Failed to check for updates: {e}"),
+                );
+            } else {
+                log::error!("Failed to check for updates: {e}");
+            }
             None
         }
     }
 }
 
-/// Get the update URL for the current platform.
-///
-/// Direct asset download is only supported on Windows for now.
-pub fn get_download_url(info: &UpdateInfo) -> String {
-    let version = &info.latest_version;
-    let base = format!("{GITHUB_REPO_URL}/releases/download/v{version}");
+/// Performs the update or shows error notification on failure.
+pub fn perform(update_info: &UpdateInfo) {
+    log::info!("Starting update to {}", update_info.latest_version);
+
+    if let Err(e) = try_perform(update_info) {
+        log_and_notify_error("Update Failed", &format!("Update failed: {e}"));
+    }
+}
+
+fn try_perform(update_info: &UpdateInfo) -> anyhow::Result<()> {
+    // Open release notes
+    let _ = open::that_detached(&update_info.release_url);
+
+    let exe_str = get_executable_path_str();
+    let temp_download = format!("{exe_str}.download");
+
+    log::info!("Downloading from {}", update_info.download_url);
+
+    // Download the update
+    let agent = create_agent();
+    let mut response = agent.get(&update_info.download_url).call()?;
+
+    // Write to temporary file
+    let mut file = std::fs::File::create(&temp_download)?;
+    let mut reader = response.body_mut().as_reader();
+    std::io::copy(&mut reader, &mut file)?;
+    drop(file);
+
+    log::info!("Download complete, launching post-update script");
 
     #[cfg(target_os = "windows")]
     {
-        format!("{base}/{GITHUB_RELEASE_ASSET}")
+        use std::os::windows::process::CommandExt;
+        // Launch PowerShell script to complete the update (no window)
+        std::process::Command::new("powershell.exe")
+            .args([
+                "-NoProfile",
+                "-Command",
+                "Start-Sleep -Seconds 2; Move-Item -Path $env:CS_TEMP_PATH -Destination $env:CS_EXE_PATH -Force; Start-Process $env:CS_EXE_PATH",
+            ])
+            .env("CS_TEMP_PATH", &temp_download)
+            .env("CS_EXE_PATH", exe_str)
+            .creation_flags(0x08000000) // CREATE_NO_WINDOW
+            .spawn()?;
     }
 
     #[cfg(not(target_os = "windows"))]
     {
-        info.release_url.clone()
+        // On non-Windows, replace the binary directly
+        std::fs::rename(&temp_download, &exe_str)?;
     }
+
+    log::info!("Post-update script launched, exiting application...");
+    std::process::exit(0);
 }
