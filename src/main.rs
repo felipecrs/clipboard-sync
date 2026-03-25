@@ -615,7 +615,7 @@ fn start_fs_watcher(
             .with_poll_interval(Duration::from_secs(FS_WATCHER_POLL_INTERVAL_SECS));
         match notify::PollWatcher::new(event_handler, config) {
             Ok(mut w) => {
-                if let Err(e) = w.watch(sync_folder, RecursiveMode::NonRecursive) {
+                if let Err(e) = w.watch(sync_folder, RecursiveMode::Recursive) {
                     log::error!("Failed to watch sync folder: {e}");
                 }
                 Some(Box::new(w))
@@ -629,7 +629,7 @@ fn start_fs_watcher(
         let config = notify::Config::default();
         match RecommendedWatcher::new(event_handler, config) {
             Ok(mut w) => {
-                if let Err(e) = w.watch(sync_folder, RecursiveMode::NonRecursive) {
+                if let Err(e) = w.watch(sync_folder, RecursiveMode::Recursive) {
                     log::error!("Failed to watch sync folder: {e}");
                 }
                 Some(Box::new(w))
