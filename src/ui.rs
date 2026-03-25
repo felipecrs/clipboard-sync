@@ -52,7 +52,7 @@ pub fn handle_menu_event(
     menu_actions: &HashMap<MenuId, MenuAction>,
     state: &mut PersistentState,
     sync_folder: &Option<PathBuf>,
-    auto_launch_enabled: &mut bool,
+    auto_launch: &auto_launch::AutoLaunch,
     update_info: &Option<UpdateInfo>,
 ) -> MenuEventResult {
     let mut result = MenuEventResult {
@@ -110,20 +110,12 @@ pub fn handle_menu_event(
             result.save_and_reload = true;
         }
         MenuAction::ToggleAutoStart => {
-            let app_path = crate::utils::get_executable_path_str();
-            let auto_launch = auto_launch::AutoLaunchBuilder::new()
-                .set_app_name(crate::consts::APP_NAME)
-                .set_app_path(&app_path)
-                .build()
-                .expect("Failed to build auto-launch");
-
-            let new_state = !*auto_launch_enabled;
+            let new_state = !auto_launch.is_enabled().unwrap_or(false);
             if new_state {
                 let _ = auto_launch.enable();
             } else {
                 let _ = auto_launch.disable();
             }
-            *auto_launch_enabled = new_state;
             result.rebuild_menu = true;
         }
         MenuAction::SetSyncCommand => {

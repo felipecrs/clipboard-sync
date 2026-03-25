@@ -86,7 +86,7 @@ struct AppState {
     sync_command: SyncCommand,
 
     // Auto-launch
-    auto_launch_enabled: bool,
+    auto_launch: auto_launch::AutoLaunch,
 
     // Update
     update_info: Option<UpdateInfo>,
@@ -263,6 +263,13 @@ fn run() -> anyhow::Result<()> {
     let tray_menu = Menu::new();
     let menu_actions = rebuild_tray_menu(&tray_menu, &persistent_state, false, &None);
 
+    let app_path = get_executable_path_str();
+    let auto_launch = AutoLaunchBuilder::new()
+        .set_app_name(APP_NAME)
+        .set_app_path(&app_path)
+        .build()
+        .context("failed to build auto-launch")?;
+
     let mut tray_icon_handle = None;
 
     let mut state = AppState {
@@ -274,7 +281,7 @@ fn run() -> anyhow::Result<()> {
         clipboard_watcher_shutdown: None,
         _fs_watcher: None,
         sync_command: SyncCommand::new(),
-        auto_launch_enabled: false,
+        auto_launch,
         update_info: None,
         current_icon: TrayIconState::Suspended,
         last_clipboard_event: None,
@@ -360,7 +367,7 @@ fn run() -> anyhow::Result<()> {
                     &state.menu_actions,
                     &mut state.persistent_state,
                     &state.sync_folder,
-                    &mut state.auto_launch_enabled,
+                    &state.auto_launch,
                     &state.update_info,
                 );
 
@@ -943,17 +950,9 @@ fn set_tray_tooltip(tray_icon_handle: &Option<tray_icon::TrayIcon>, status: &str
 }
 
 fn rebuild_menu(state: &mut AppState) {
-    let app_path = get_executable_path_str();
-    let auto_launch = AutoLaunchBuilder::new()
-        .set_app_name(APP_NAME)
-        .set_app_path(&app_path)
-        .build()
-        .expect("Failed to build auto-launch");
-
-    state.auto_launch_enabled = auto_launch.is_enabled().unwrap_or(false);
+    let auto_launch_enabled = state.auto_launch.is_enabled().unwrap_or(false);
 
     let new_actions = {
-        let auto_launch_enabled = state.auto_launch_enabled;
         rebuild_tray_menu(
             &state.tray_menu,
             &state.persistent_state,
