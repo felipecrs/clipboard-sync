@@ -274,6 +274,10 @@ pub fn rebuild_tray_menu(
     actions.insert(auto_clean.id().clone(), MenuAction::ToggleAutoCleanup);
     tray_menu.append(&auto_clean).unwrap();
 
+    let auto_start = CheckMenuItem::new("Auto launch on startup", true, auto_launch_enabled, None);
+    actions.insert(auto_start.id().clone(), MenuAction::ToggleAutoStart);
+    tray_menu.append(&auto_start).unwrap();
+
     let check_updates_on_launch = CheckMenuItem::new(
         "Check for updates on launch",
         true,
@@ -285,14 +289,6 @@ pub fn rebuild_tray_menu(
         MenuAction::ToggleCheckUpdatesOnLaunch,
     );
     tray_menu.append(&check_updates_on_launch).unwrap();
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        let auto_start =
-            CheckMenuItem::new("Auto-launch on startup", true, auto_launch_enabled, None);
-        actions.insert(auto_start.id().clone(), MenuAction::ToggleAutoStart);
-        tray_menu.append(&auto_start).unwrap();
-    }
 
     tray_menu.append(&PredefinedMenuItem::separator()).unwrap();
 
