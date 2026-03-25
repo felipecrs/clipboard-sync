@@ -1,4 +1,4 @@
-use crate::config::{Config, WatchMode};
+use crate::config::{PersistentState, WatchMode};
 use crate::consts::GITHUB_REPO_URL;
 use crate::update::UpdateInfo;
 use crate::utils::{get_executable_directory, open_path, open_url};
@@ -50,7 +50,7 @@ pub struct MenuEventResult {
 pub fn handle_menu_event(
     menu_id: &MenuId,
     menu_actions: &HashMap<MenuId, MenuAction>,
-    config: &mut Config,
+    state: &mut PersistentState,
     sync_folder: &Option<PathBuf>,
     auto_launch_enabled: &mut bool,
     update_info: &Option<UpdateInfo>,
@@ -70,43 +70,43 @@ pub fn handle_menu_event(
 
     match action {
         MenuAction::ToggleSendTexts => {
-            config.send_texts = !config.send_texts;
+            state.send_texts = !state.send_texts;
             result.save_and_reload = true;
         }
         MenuAction::ToggleSendImages => {
-            config.send_images = !config.send_images;
+            state.send_images = !state.send_images;
             result.save_and_reload = true;
         }
         MenuAction::ToggleSendFiles => {
-            config.send_files = !config.send_files;
+            state.send_files = !state.send_files;
             result.save_and_reload = true;
         }
         MenuAction::ToggleReceiveTexts => {
-            config.receive_texts = !config.receive_texts;
+            state.receive_texts = !state.receive_texts;
             result.save_and_reload = true;
         }
         MenuAction::ToggleReceiveImages => {
-            config.receive_images = !config.receive_images;
+            state.receive_images = !state.receive_images;
             result.save_and_reload = true;
         }
         MenuAction::ToggleReceiveFiles => {
-            config.receive_files = !config.receive_files;
+            state.receive_files = !state.receive_files;
             result.save_and_reload = true;
         }
         MenuAction::SetWatchModeNative => {
-            config.watch_mode = WatchMode::Native;
+            state.watch_mode = WatchMode::Native;
             result.save_and_reload = true;
         }
         MenuAction::SetWatchModePolling => {
-            config.watch_mode = WatchMode::Polling;
+            state.watch_mode = WatchMode::Polling;
             result.save_and_reload = true;
         }
         MenuAction::ToggleAutoCleanup => {
-            config.auto_cleanup = !config.auto_cleanup;
+            state.auto_cleanup = !state.auto_cleanup;
             result.save_and_reload = true;
         }
         MenuAction::ToggleCheckUpdatesOnLaunch => {
-            config.check_updates_on_launch = !config.check_updates_on_launch;
+            state.check_updates_on_launch = !state.check_updates_on_launch;
             result.save_and_reload = true;
         }
         MenuAction::ToggleAutoStart => {
@@ -127,7 +127,7 @@ pub fn handle_menu_event(
             result.rebuild_menu = true;
         }
         MenuAction::SetSyncCommand => {
-            let current = &config.sync_command;
+            let current = &state.sync_command;
             let default = if current.is_empty() {
                 ""
             } else {
@@ -138,13 +138,13 @@ pub fn handle_menu_event(
                 "Enter a command to run before syncing (leave empty to disable):",
                 default,
             ) {
-                config.sync_command = cmd;
+                state.sync_command = cmd;
                 result.save_and_reload = true;
             }
         }
         MenuAction::ChangeFolder => {
             if let Some(folder) = pick_folder() {
-                config.folder = Some(folder);
+                state.folder = Some(folder);
                 result.save_and_reload = true;
             }
         }
@@ -189,7 +189,7 @@ fn pick_folder() -> Option<String> {
 /// Rebuild the tray context menu in place, returning a mapping of MenuId -> MenuAction.
 pub fn rebuild_tray_menu(
     tray_menu: &Menu,
-    config: &Config,
+    state: &PersistentState,
     auto_launch_enabled: bool,
     update_info: &Option<UpdateInfo>,
 ) -> HashMap<MenuId, MenuAction> {
@@ -206,25 +206,25 @@ pub fn rebuild_tray_menu(
         .unwrap();
 
     let send_submenu = Submenu::new("Send", true);
-    let send_texts = CheckMenuItem::new("Texts", true, config.send_texts, None);
+    let send_texts = CheckMenuItem::new("Texts", true, state.send_texts, None);
     actions.insert(send_texts.id().clone(), MenuAction::ToggleSendTexts);
     send_submenu.append(&send_texts).unwrap();
-    let send_images = CheckMenuItem::new("Images", true, config.send_images, None);
+    let send_images = CheckMenuItem::new("Images", true, state.send_images, None);
     actions.insert(send_images.id().clone(), MenuAction::ToggleSendImages);
     send_submenu.append(&send_images).unwrap();
-    let send_files = CheckMenuItem::new("Files", true, config.send_files, None);
+    let send_files = CheckMenuItem::new("Files", true, state.send_files, None);
     actions.insert(send_files.id().clone(), MenuAction::ToggleSendFiles);
     send_submenu.append(&send_files).unwrap();
     tray_menu.append(&send_submenu).unwrap();
 
     let receive_submenu = Submenu::new("Receive", true);
-    let recv_texts = CheckMenuItem::new("Texts", true, config.receive_texts, None);
+    let recv_texts = CheckMenuItem::new("Texts", true, state.receive_texts, None);
     actions.insert(recv_texts.id().clone(), MenuAction::ToggleReceiveTexts);
     receive_submenu.append(&recv_texts).unwrap();
-    let recv_images = CheckMenuItem::new("Images", true, config.receive_images, None);
+    let recv_images = CheckMenuItem::new("Images", true, state.receive_images, None);
     actions.insert(recv_images.id().clone(), MenuAction::ToggleReceiveImages);
     receive_submenu.append(&recv_images).unwrap();
-    let recv_files = CheckMenuItem::new("Files", true, config.receive_files, None);
+    let recv_files = CheckMenuItem::new("Files", true, state.receive_files, None);
     actions.insert(recv_files.id().clone(), MenuAction::ToggleReceiveFiles);
     receive_submenu.append(&recv_files).unwrap();
     tray_menu.append(&receive_submenu).unwrap();
@@ -240,7 +240,7 @@ pub fn rebuild_tray_menu(
     actions.insert(change_folder.id().clone(), MenuAction::ChangeFolder);
     tray_menu.append(&change_folder).unwrap();
 
-    let sync_cmd_label = if config.sync_command.is_empty() {
+    let sync_cmd_label = if state.sync_command.is_empty() {
         "Set sync command..."
     } else {
         "Change sync command..."
@@ -257,28 +257,27 @@ pub fn rebuild_tray_menu(
         .unwrap();
 
     let watch_submenu = Submenu::new("Watch mode", true);
-    let wm_native =
-        CheckMenuItem::new("Native", true, config.watch_mode == WatchMode::Native, None);
+    let wm_native = CheckMenuItem::new("Native", true, state.watch_mode == WatchMode::Native, None);
     actions.insert(wm_native.id().clone(), MenuAction::SetWatchModeNative);
     watch_submenu.append(&wm_native).unwrap();
     let wm_polling = CheckMenuItem::new(
         "Polling",
         true,
-        config.watch_mode == WatchMode::Polling,
+        state.watch_mode == WatchMode::Polling,
         None,
     );
     actions.insert(wm_polling.id().clone(), MenuAction::SetWatchModePolling);
     watch_submenu.append(&wm_polling).unwrap();
     tray_menu.append(&watch_submenu).unwrap();
 
-    let auto_clean = CheckMenuItem::new("Auto-clean", true, config.auto_cleanup, None);
+    let auto_clean = CheckMenuItem::new("Auto-clean", true, state.auto_cleanup, None);
     actions.insert(auto_clean.id().clone(), MenuAction::ToggleAutoCleanup);
     tray_menu.append(&auto_clean).unwrap();
 
     let check_updates_on_launch = CheckMenuItem::new(
         "Check for updates on launch",
         true,
-        config.check_updates_on_launch,
+        state.check_updates_on_launch,
         None,
     );
     actions.insert(
@@ -306,7 +305,7 @@ pub fn rebuild_tray_menu(
     actions.insert(reinitialize.id().clone(), MenuAction::Reinitialize);
     tray_menu.append(&reinitialize).unwrap();
 
-    let open_sync_folder = MenuItem::new("Open sync folder...", config.folder.is_some(), None);
+    let open_sync_folder = MenuItem::new("Open sync folder...", state.folder.is_some(), None);
     actions.insert(open_sync_folder.id().clone(), MenuAction::OpenSyncFolder);
     tray_menu.append(&open_sync_folder).unwrap();
 

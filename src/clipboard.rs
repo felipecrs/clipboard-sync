@@ -192,7 +192,7 @@ pub struct ClipboardDedupState {
 pub fn write_clipboard_to_file(
     sync_folder: &Path,
     hostname: &str,
-    config: &crate::config::Config,
+    state: &crate::config::PersistentState,
     dedup: &mut ClipboardDedupState,
 ) -> bool {
     let last_beat = &mut dedup.last_beat;
@@ -226,7 +226,7 @@ pub fn write_clipboard_to_file(
     let mut clipboard_file_paths: Option<Vec<String>> = None;
 
     if ctx.has(ContentFormat::Files) {
-        if !config.send_files {
+        if !state.send_files {
             return false;
         }
         match ctx.get_files() {
@@ -240,7 +240,7 @@ pub fn write_clipboard_to_file(
             }
         }
     } else if ctx.has(ContentFormat::Image) {
-        if !config.send_images {
+        if !state.send_images {
             return false;
         }
         match ctx.get_image() {
@@ -266,7 +266,7 @@ pub fn write_clipboard_to_file(
         || ctx.has(ContentFormat::Html)
         || ctx.has(ContentFormat::Rtf)
     {
-        if !config.send_texts {
+        if !state.send_texts {
             return false;
         }
         let mut ct = ClipboardText::default();
@@ -423,7 +423,7 @@ pub fn write_clipboard_to_file(
 /// Returns `true` if the clipboard was updated.
 pub fn read_clipboard_from_file(
     parsed: &ParsedClipboardFile,
-    config: &crate::config::Config,
+    state: &crate::config::PersistentState,
     dedup: &mut ClipboardDedupState,
 ) -> bool {
     let last_beat = &mut dedup.last_beat;
@@ -441,7 +441,7 @@ pub fn read_clipboard_from_file(
 
     match parsed.content_type {
         ClipboardContentType::Text => {
-            if !config.receive_texts {
+            if !state.receive_texts {
                 return false;
             }
             match std::fs::read_to_string(file) {
@@ -459,7 +459,7 @@ pub fn read_clipboard_from_file(
             }
         }
         ClipboardContentType::Image => {
-            if !config.receive_images {
+            if !state.receive_images {
                 return false;
             }
             match std::fs::read(file) {
@@ -475,7 +475,7 @@ pub fn read_clipboard_from_file(
             }
         }
         ClipboardContentType::Files => {
-            if !config.receive_files {
+            if !state.receive_files {
                 return false;
             }
             let expected_count = match parsed.files_count {

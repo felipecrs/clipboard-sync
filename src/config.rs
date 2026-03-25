@@ -1,4 +1,4 @@
-use crate::consts::CONFIG_FILE_NAME;
+use crate::consts::STATE_FILE_NAME;
 use crate::utils::get_executable_directory;
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
@@ -15,10 +15,10 @@ pub enum WatchMode {
     Polling,
 }
 
-/// Persistent application configuration.
+/// Persistent application state.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
-pub struct Config {
+pub struct PersistentState {
     pub folder: Option<String>,
     pub send_texts: bool,
     pub send_images: bool,
@@ -32,7 +32,7 @@ pub struct Config {
     pub check_updates_on_launch: bool,
 }
 
-impl Default for Config {
+impl Default for PersistentState {
     fn default() -> Self {
         Self {
             folder: None,
@@ -50,7 +50,7 @@ impl Default for Config {
     }
 }
 
-impl Config {
+impl PersistentState {
     pub fn is_sending_anything(&self) -> bool {
         self.send_texts || self.send_images || self.send_files
     }
@@ -60,18 +60,18 @@ impl Config {
     }
 }
 
-fn get_config_file_path() -> PathBuf {
-    get_executable_directory().join(CONFIG_FILE_NAME)
+fn get_state_file_path() -> PathBuf {
+    get_executable_directory().join(STATE_FILE_NAME)
 }
 
-pub fn save_config(config: &Config) {
-    let path = get_config_file_path();
+pub fn save_state(state: &PersistentState) {
+    let path = get_state_file_path();
     let tmp_path = path.with_extension("json.tmp");
 
-    let json = match serde_json::to_string_pretty(config) {
+    let json = match serde_json::to_string_pretty(state) {
         Ok(json) => json,
         Err(e) => {
-            log::error!("Failed to serialize config: {e}");
+            log::error!("Failed to serialize state: {e}");
             return;
         }
     };
@@ -80,7 +80,7 @@ pub fn save_config(config: &Config) {
     // This prevents corruption if the process is interrupted mid-write.
     if let Err(e) = fs::write(&tmp_path, &json) {
         log::error!(
-            "Failed to write temporary config file '{}': {e}",
+            "Failed to write temporary state file '{}': {e}",
             tmp_path.display()
         );
         return;
@@ -88,7 +88,7 @@ pub fn save_config(config: &Config) {
 
     if let Err(e) = fs::rename(&tmp_path, &path) {
         log::error!(
-            "Failed to rename temporary config file '{}' to '{}': {e}",
+            "Failed to rename temporary state file '{}' to '{}': {e}",
             tmp_path.display(),
             path.display()
         );
@@ -97,21 +97,21 @@ pub fn save_config(config: &Config) {
     }
 }
 
-pub fn load_config() -> anyhow::Result<Config> {
-    let path = get_config_file_path();
+pub fn load_state() -> anyhow::Result<PersistentState> {
+    let path = get_state_file_path();
 
     let data = match fs::read_to_string(&path) {
         Ok(data) => data,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // First run or file was deleted intentionally — use defaults
-            return Ok(Config::default());
+            return Ok(PersistentState::default());
         }
         Err(e) => {
             return Err(anyhow::anyhow!(e))
-                .with_context(|| format!("Failed to read config file '{}'", path.display()));
+                .with_context(|| format!("Failed to read state file '{}'", path.display()));
         }
     };
 
     serde_json::from_str(&data)
-        .with_context(|| format!("Failed to parse config file '{}'", path.display()))
+        .with_context(|| format!("Failed to parse state file '{}'", path.display()))
 }

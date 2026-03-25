@@ -1,7 +1,7 @@
 pub const APP_NAME: &str = "Clipboard Sync";
 pub const APP_AUMID: &str = "FelipeSantos.ClipboardSync";
 pub const APP_UID: &str = "72812af2-6bcc-40d9-b35d-0b43e72ac346";
-pub const CONFIG_FILE_NAME: &str = "ClipboardSyncConfig.json";
+pub const STATE_FILE_NAME: &str = "ClipboardSyncState.json";
 pub const LOG_FILE_NAME: &str = "ClipboardSync.log";
 pub const PNG_ICON_BYTES: &[u8] = include_bytes!("../resources/appicons/png/icon.png");
 pub const PNG_ICON_FILE_NAME: &str = "ClipboardSync.png";

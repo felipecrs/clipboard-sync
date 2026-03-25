@@ -17,7 +17,7 @@ use crate::clipboard::{
     ClipboardDedupState, clean_files, now_ms, parse_clipboard_filename, read_clipboard_from_file,
     write_clipboard_to_file,
 };
-use crate::config::{Config, WatchMode, load_config, save_config};
+use crate::config::{PersistentState, WatchMode, load_state, save_state};
 use crate::consts::*;
 use crate::platform::{NotificationDuration, init_platform, send_notification};
 use crate::sync_command::SyncCommand;
@@ -63,7 +63,7 @@ impl ClipboardHandler for ClipboardChangeHandler {
 // --- Application state ---
 
 struct AppState {
-    config: Config,
+    persistent_state: PersistentState,
     hostname: String,
     sync_folder: Option<PathBuf>,
 
@@ -210,8 +210,8 @@ fn run() -> anyhow::Result<()> {
     let hostname = get_hostname();
     log::info!("Hostname: {hostname}");
 
-    let config = match load_config() {
-        Ok(config) => config,
+    let persistent_state = match load_state() {
+        Ok(persistent_state) => persistent_state,
         Err(e) => {
             let message = format!(
                 "{e}\n\nExiting to prevent overwriting your preferences. Please check the state file."
@@ -220,7 +220,7 @@ fn run() -> anyhow::Result<()> {
             std::process::exit(1);
         }
     };
-    log::info!("Loaded: {:?}", config);
+    log::info!("Loaded: {:?}", persistent_state);
 
     // Start async executor worker thread
     std::thread::spawn(|| smol::block_on(EXECUTOR.run(smol::future::pending::<()>())));
@@ -257,14 +257,14 @@ fn run() -> anyhow::Result<()> {
 
     // Build initial menu (auto-launch status will be checked when initializing)
     let tray_menu = Menu::new();
-    let menu_actions = rebuild_tray_menu(&tray_menu, &config, false, &None);
+    let menu_actions = rebuild_tray_menu(&tray_menu, &persistent_state, false, &None);
 
     let mut tray_icon_handle = None;
 
     let mut state = AppState {
         hostname,
-        sync_folder: config.folder.as_ref().map(PathBuf::from),
-        config,
+        sync_folder: persistent_state.folder.as_ref().map(PathBuf::from),
+        persistent_state,
         initialized: false,
         dedup: ClipboardDedupState::default(),
         clipboard_watcher_shutdown: None,
@@ -306,7 +306,7 @@ fn run() -> anyhow::Result<()> {
                 );
 
                 // Async update check (non-blocking)
-                if state.config.check_updates_on_launch {
+                if state.persistent_state.check_updates_on_launch {
                     let p = main_proxy.clone();
                     EXECUTOR
                         .spawn(async move {
@@ -354,7 +354,7 @@ fn run() -> anyhow::Result<()> {
                 let result = ui::handle_menu_event(
                     &menu_event.id,
                     &state.menu_actions,
-                    &mut state.config,
+                    &mut state.persistent_state,
                     &state.sync_folder,
                     &mut state.auto_launch_enabled,
                     &state.update_info,
@@ -362,8 +362,8 @@ fn run() -> anyhow::Result<()> {
 
                 if result.save_and_reload {
                     // Sync folder may have changed via ChangeFolder action
-                    state.sync_folder = state.config.folder.as_ref().map(PathBuf::from);
-                    save_config(&state.config);
+                    state.sync_folder = state.persistent_state.folder.as_ref().map(PathBuf::from);
+                    save_state(&state.persistent_state);
                     let _ = main_proxy.send_event(UserEvent::Reload);
                 }
 
@@ -416,7 +416,7 @@ fn run() -> anyhow::Result<()> {
 
             Event::UserEvent(UserEvent::KeepAlive) => {
                 if state.initialized
-                    && state.config.is_receiving_anything()
+                    && state.persistent_state.is_receiving_anything()
                     && let Some(ref sf) = state.sync_folder
                 {
                     write_keep_alive(sf, &state.hostname);
@@ -425,7 +425,7 @@ fn run() -> anyhow::Result<()> {
 
             Event::UserEvent(UserEvent::Cleanup) => {
                 if state.initialized
-                    && state.config.auto_cleanup
+                    && state.persistent_state.auto_cleanup
                     && let Some(ref sf) = state.sync_folder
                 {
                     clean_files(sf, &state.hostname);
@@ -496,15 +496,18 @@ fn initialize(
     tray_icon_handle: &Option<tray_icon::TrayIcon>,
 ) {
     // Start sync command if configured (may create the sync folder)
-    if !state.config.sync_command.is_empty() {
+    if !state.persistent_state.sync_command.is_empty() {
         log::info!("Starting sync command...");
-        if state.sync_command.start(&state.config.sync_command) {
+        if state
+            .sync_command
+            .start(&state.persistent_state.sync_command)
+        {
             state.sync_command_started_at = Some(Instant::now());
         }
     }
 
     if state.sync_folder.is_none()
-        && let Some(ref folder) = state.config.folder
+        && let Some(ref folder) = state.persistent_state.folder
     {
         state.sync_folder = Some(PathBuf::from(folder));
     }
@@ -530,7 +533,7 @@ fn initialize(
     }
 
     // Start clipboard watcher (for sending)
-    if state.config.is_sending_anything() {
+    if state.persistent_state.is_sending_anything() {
         log::info!("Starting clipboard watcher...");
         let p = proxy.clone();
         let mut watcher_ctx = match ClipboardWatcherContext::new() {
@@ -551,8 +554,8 @@ fn initialize(
     }
 
     // Start file watcher (for receiving)
-    if state.config.is_receiving_anything() {
-        let watch_mode: WatchMode = state.config.watch_mode.clone();
+    if state.persistent_state.is_receiving_anything() {
+        let watch_mode: WatchMode = state.persistent_state.watch_mode.clone();
         log::info!("Starting file watcher...");
         log::info!("Watch mode: {:?}", watch_mode);
 
@@ -573,7 +576,7 @@ fn initialize(
     }
 
     // Initial auto-cleanup + periodic cleanup task
-    if state.config.auto_cleanup {
+    if state.persistent_state.auto_cleanup {
         log::info!("Performing initial cleanup...");
         clean_files(&sync_folder, &state.hostname);
 
@@ -774,7 +777,7 @@ fn handle_clipboard_ready(
     let sent = write_clipboard_to_file(
         &sync_folder,
         &state.hostname,
-        &state.config,
+        &state.persistent_state,
         &mut state.dedup,
     );
 
@@ -806,7 +809,7 @@ fn handle_clipboard_file_ready(
     );
 
     if let Some(parsed) = parsed {
-        let received = read_clipboard_from_file(&parsed, &state.config, &mut state.dedup);
+        let received = read_clipboard_from_file(&parsed, &state.persistent_state, &mut state.dedup);
 
         if received {
             set_icon_for_duration(state, tray_icon_handle, proxy, TrayIconState::Received);
@@ -949,7 +952,7 @@ fn rebuild_menu(state: &mut AppState) {
         let auto_launch_enabled = state.auto_launch_enabled;
         rebuild_tray_menu(
             &state.tray_menu,
-            &state.config,
+            &state.persistent_state,
             auto_launch_enabled,
             &state.update_info,
         )
