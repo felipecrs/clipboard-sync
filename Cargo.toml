@@ -31,9 +31,9 @@ sha2 = "0.10.9"
 shell-words = "1.1.1"
 simplelog = "0.12.2"
 single-instance = "0.3.3"
-tao = "0.34.6"
+tao = "0.34.8"
 tray-icon = "0.21.3"
-ureq = { version = "3.2.0", default-features = false, features = [
+ureq = { version = "3.3.0", default-features = false, features = [
 	"native-tls",
 ] }
 walkdir = "2.5.0"
