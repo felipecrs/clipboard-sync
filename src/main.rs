@@ -24,7 +24,9 @@ use crate::sync_command::SyncCommand;
 use crate::types::*;
 use crate::ui::{MenuAction, UpdateAction, rebuild_tray_menu};
 use crate::update::UpdateInfo;
-use crate::utils::{get_executable_directory, get_executable_path_str, get_hostname};
+use crate::utils::{
+    get_executable_directory, get_executable_path_str, get_hostname, log_and_notify_error,
+};
 
 use anyhow::Context;
 use auto_launch::AutoLaunchBuilder;
@@ -208,8 +210,17 @@ fn run() -> anyhow::Result<()> {
     let hostname = get_hostname();
     log::info!("Hostname: {hostname}");
 
-    let config = load_config();
-    log::info!("Loaded config: {:?}", config);
+    let config = match load_config() {
+        Ok(config) => config,
+        Err(e) => {
+            let message = format!(
+                "{e}\n\nExiting to prevent overwriting your preferences. Please check the state file."
+            );
+            log_and_notify_error("Failed to Load Preferences", &message);
+            std::process::exit(1);
+        }
+    };
+    log::info!("Loaded: {:?}", config);
 
     // Start async executor worker thread
     std::thread::spawn(|| smol::block_on(EXECUTOR.run(smol::future::pending::<()>())));

@@ -1,5 +1,6 @@
 use crate::consts::CONFIG_FILE_NAME;
 use crate::utils::get_executable_directory;
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -64,22 +65,53 @@ fn get_config_file_path() -> PathBuf {
 }
 
 pub fn save_config(config: &Config) {
-    match serde_json::to_string_pretty(config) {
-        Ok(json) => {
-            if let Err(error) = fs::write(get_config_file_path(), json) {
-                log::error!("Failed to write config file: {error}");
-            }
+    let path = get_config_file_path();
+    let tmp_path = path.with_extension("json.tmp");
+
+    let json = match serde_json::to_string_pretty(config) {
+        Ok(json) => json,
+        Err(e) => {
+            log::error!("Failed to serialize config: {e}");
+            return;
         }
-        Err(error) => {
-            log::error!("Failed to serialize config: {error}");
-        }
+    };
+
+    // Write to a temporary file first, then atomically rename to the target.
+    // This prevents corruption if the process is interrupted mid-write.
+    if let Err(e) = fs::write(&tmp_path, &json) {
+        log::error!(
+            "Failed to write temporary config file '{}': {e}",
+            tmp_path.display()
+        );
+        return;
+    }
+
+    if let Err(e) = fs::rename(&tmp_path, &path) {
+        log::error!(
+            "Failed to rename temporary config file '{}' to '{}': {e}",
+            tmp_path.display(),
+            path.display()
+        );
+        // Try to clean up the temporary file
+        let _ = fs::remove_file(&tmp_path);
     }
 }
 
-pub fn load_config() -> Config {
-    let config_path = get_config_file_path();
-    fs::read_to_string(config_path)
-        .ok()
-        .and_then(|data| serde_json::from_str(&data).ok())
-        .unwrap_or_default()
+pub fn load_config() -> anyhow::Result<Config> {
+    let path = get_config_file_path();
+
+    let data = match fs::read_to_string(&path) {
+        Ok(data) => data,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            // First run or file was deleted intentionally — use defaults
+            return Ok(Config::default());
+        }
+        Err(e) => {
+            return Err(anyhow::anyhow!(e))
+                .with_context(|| format!("Failed to read config file '{}'", path.display()));
+        }
+    };
+
+    serde_json::from_str(&data)
+        .with_context(|| format!("Failed to parse config file '{}'", path.display()))
 }
