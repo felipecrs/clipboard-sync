@@ -23,6 +23,8 @@ faccess = "0.2.4"
 gethostname = "1.1.0"
 log = "0.4.29"
 notify = "8.2.0"
+notify-rust = "4.12.0"
+open = "5.3.3"
 regex-lite = "0.1.9"
 semver = "1.0.27"
 serde = { version = "1.0.228", features = ["derive"] }
@@ -31,17 +33,15 @@ sha2 = "0.10.9"
 shell-words = "1.1.1"
 simplelog = "0.12.2"
 single-instance = "0.3.3"
+smol = "2.0.2"
 tao = "0.34.8"
+tinyfiledialogs = "3.9.1"
 tray-icon = "0.21.3"
 ureq = { version = "3.3.0", default-features = false, features = [
 	"native-tls",
 ] }
-walkdir = "2.5.0"
-tinyfiledialogs = "3.9.1"
-open = "5.3.3"
-notify-rust = "4.12.0"
 user-idle2 = "0.6.2"
-smol = "2.0.2"
+walkdir = "2.5.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 win32job = "2.0.3"

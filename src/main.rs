@@ -18,7 +18,11 @@ use crate::clipboard::{
     write_clipboard_to_file,
 };
 use crate::config::{PersistentState, WatchMode, load_state, save_state};
-use crate::consts::*;
+use crate::consts::{
+    APP_NAME, APP_UID, CLIPBOARD_DEBOUNCE_MS, CLIPBOARD_WRITE_DELAY_MS, CURRENT_VERSION,
+    FS_WATCHER_POLL_INTERVAL_SECS, ICON_FLASH_DURATION_SECS, IDLE_TIMEOUT_SECS,
+    IS_RECEIVING_FILE_SUFFIX, KEEP_ALIVE_INTERVAL_SECS, LOG_FILE_NAME, SYNC_COMMAND_WAIT_SECS,
+};
 use crate::platform::{NotificationDuration, init_platform, send_notification};
 use crate::sync_command::SyncCommand;
 use crate::types::*;
@@ -137,7 +141,7 @@ fn get_tray_icon(state: TrayIconState) -> tray_icon::Icon {
         let icon_path = get_executable_directory()
             .join("resources/trayicons/png")
             .join(format!("{icon_name}.png"));
-        let bytes = std::fs::read(&icon_path).unwrap_or_else(|_| PNG_ICON_BYTES.to_vec());
+        let bytes = std::fs::read(&icon_path).unwrap_or_else(|_| crate::consts::PNG_ICON_BYTES.to_vec());
         // Decode PNG to RGBA
         let decoder = png::Decoder::new(std::io::Cursor::new(&bytes));
         let mut reader = decoder.read_info().unwrap();
@@ -149,9 +153,9 @@ fn get_tray_icon(state: TrayIconState) -> tray_icon::Icon {
 }
 
 fn main() {
-    if let Err(error) = run() {
-        eprintln!("Fatal error: {error:#}");
-        log::error!("Fatal error: {error:#}");
+    if let Err(e) = run() {
+        eprintln!("Fatal error: {e:#}");
+        log::error!("Fatal error: {e:#}");
         std::process::exit(1);
     }
 }
@@ -181,13 +185,13 @@ fn run() -> anyhow::Result<()> {
     let loggers: Vec<Box<dyn SharedLogger>> = vec![
         WriteLogger::new(
             LevelFilter::Info,
-            simplelog::Config::default(),
+            Config::default(),
             File::create(&log_path).context("failed to create log file")?,
         ),
         #[cfg(debug_assertions)]
         TermLogger::new(
             LevelFilter::Info,
-            simplelog::Config::default(),
+            Config::default(),
             TerminalMode::Stderr,
             ColorChoice::Auto,
         ),
@@ -220,7 +224,7 @@ fn run() -> anyhow::Result<()> {
             std::process::exit(1);
         }
     };
-    log::info!("Loaded: {:?}", persistent_state);
+    log::info!("Loaded: {persistent_state:?}");
 
     // Start async executor worker thread
     std::thread::spawn(|| smol::block_on(EXECUTOR.run(smol::future::pending::<()>())));

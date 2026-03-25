@@ -7,8 +7,8 @@ use windows_registry::CURRENT_USER;
 
 pub fn init_platform(executable_directory: &Path) -> anyhow::Result<()> {
     unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()? };
-    if let Err(error) = setup_app_aumid(executable_directory) {
-        log::warn!("Failed to set up app AUMID: {error}");
+    if let Err(e) = setup_app_aumid(executable_directory) {
+        log::warn!("Failed to set up app AUMID: {e}");
     }
     Ok(())
 }
@@ -21,8 +21,8 @@ fn setup_app_aumid(executable_directory: &Path) -> Result<()> {
 
     // We need an icon file for the AUMID to work properly
     let png_path = executable_directory.join(PNG_ICON_FILE_NAME);
-    if let Err(error) = std::fs::write(&png_path, PNG_ICON_BYTES) {
-        log::warn!("Failed to write {PNG_ICON_FILE_NAME} icon: {error}");
+    if let Err(e) = std::fs::write(&png_path, PNG_ICON_BYTES) {
+        log::warn!("Failed to write {PNG_ICON_FILE_NAME} icon: {e}");
         let _ = key.remove_value("IconUri");
     } else {
         let _ = key.set_hstring("IconUri", &png_path.as_path().into());

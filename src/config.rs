@@ -7,7 +7,6 @@ use std::path::PathBuf;
 
 /// Watch mode for detecting incoming clipboard files.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 #[derive(Default)]
 pub enum WatchMode {
     #[default]
@@ -17,7 +16,7 @@ pub enum WatchMode {
 
 /// Persistent application state.
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
+#[serde(default)]
 pub struct PersistentState {
     pub folder: Option<String>,
     pub send_texts: bool,
