@@ -115,7 +115,7 @@ pub fn handle_menu_event(
                 .set_app_name(crate::consts::APP_NAME)
                 .set_app_path(&app_path)
                 .build()
-                .expect("Failed to build auto launch");
+                .expect("Failed to build auto-launch");
 
             let new_state = !*auto_launch_enabled;
             if new_state {
@@ -274,7 +274,7 @@ pub fn rebuild_tray_menu(
     actions.insert(auto_clean.id().clone(), MenuAction::ToggleAutoCleanup);
     tray_menu.append(&auto_clean).unwrap();
 
-    let auto_start = CheckMenuItem::new("Auto launch on startup", true, auto_launch_enabled, None);
+    let auto_start = CheckMenuItem::new("Auto-launch on startup", true, auto_launch_enabled, None);
     actions.insert(auto_start.id().clone(), MenuAction::ToggleAutoStart);
     tray_menu.append(&auto_start).unwrap();
 

@@ -944,7 +944,7 @@ fn rebuild_menu(state: &mut AppState) {
         .set_app_name(APP_NAME)
         .set_app_path(&app_path)
         .build()
-        .expect("Failed to build auto launch");
+        .expect("Failed to build auto-launch");
 
     state.auto_launch_enabled = auto_launch.is_enabled().unwrap_or(false);
 
