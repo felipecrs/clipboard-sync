@@ -6,13 +6,5 @@
   "lockFileMaintenance": {
     "enabled": true,
     "automerge": true
-  },
-  "packageRules": [
-    {
-      "description": "Automerge non-major dev updates",
-      "matchDepTypes": ["devDependencies"],
-      "matchUpdateTypes": ["minor", "patch"],
-      "automerge": true
-    }
-  ]
+  }
 }
