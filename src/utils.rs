@@ -39,7 +39,11 @@ pub fn get_hostname() -> String {
 pub fn calculate_sha256(data: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(data);
-    format!("{:x}", hasher.finalize())
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{:02x}", b))
+        .collect()
 }
 
 /// Get the total number of files (not directories) recursively in a list of paths.
