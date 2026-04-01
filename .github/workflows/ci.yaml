@@ -19,7 +19,7 @@ jobs:
     runs-on: "${{ matrix.os }}-latest"
     steps:
       - uses: actions/checkout@v6
-      - uses: volta-cli/action@v4
+      - uses: volta-cli/action@v5
       # https://github.com/actions/runner/issues/2958#issuecomment-2186602747
       - if: matrix.os == 'macos'
         run: brew install python-setuptools
@@ -44,7 +44,7 @@ jobs:
     runs-on: "${{ matrix.os }}-latest"
     steps:
       - uses: actions/checkout@v6
-      - uses: volta-cli/action@v4
+      - uses: volta-cli/action@v5
       # https://github.com/actions/runner/issues/2958#issuecomment-2186602747
       - if: matrix.os == 'macos'
         run: brew install python-setuptools
