@@ -1,4 +1,4 @@
-use crate::consts::{APP_AUMID, APP_NAME, PNG_ICON_BYTES, PNG_ICON_FILE_NAME};
+use crate::consts::{APP_AUMID, APP_ICON_PNG_BYTES, APP_ICON_PNG_FILE_NAME, APP_NAME};
 use std::path::Path;
 use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
 use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
@@ -20,9 +20,9 @@ fn setup_app_aumid(executable_directory: &Path) -> Result<()> {
     let _ = key.set_string("DisplayName", APP_NAME);
 
     // We need an icon file for the AUMID to work properly
-    let png_path = executable_directory.join(PNG_ICON_FILE_NAME);
-    if let Err(e) = std::fs::write(&png_path, PNG_ICON_BYTES) {
-        log::warn!("Failed to write {PNG_ICON_FILE_NAME} icon: {e}");
+    let png_path = executable_directory.join(APP_ICON_PNG_FILE_NAME);
+    if let Err(e) = std::fs::write(&png_path, APP_ICON_PNG_BYTES) {
+        log::warn!("Failed to write {APP_ICON_PNG_FILE_NAME} icon: {e}");
         let _ = key.remove_value("IconUri");
     } else {
         let _ = key.set_hstring("IconUri", &png_path.as_path().into());

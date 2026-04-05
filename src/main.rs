@@ -131,20 +131,14 @@ fn get_tray_icon(state: TrayIconState) -> tray_icon::Icon {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        // On non-Windows, load from PNG files next to the executable
-        let icon_name = match state {
-            TrayIconState::Working => "working",
-            TrayIconState::Sent => "sent",
-            TrayIconState::Received => "received",
-            TrayIconState::Suspended => "suspended",
+        let bytes = match state {
+            TrayIconState::Working => crate::consts::WORKING_TRAY_ICON_BYTES,
+            TrayIconState::Sent => crate::consts::SENT_TRAY_ICON_BYTES,
+            TrayIconState::Received => crate::consts::RECEIVED_TRAY_ICON_BYTES,
+            TrayIconState::Suspended => crate::consts::SUSPENDED_TRAY_ICON_BYTES,
         };
-        let icon_path = get_executable_directory()
-            .join("resources/trayicons/png")
-            .join(format!("{icon_name}.png"));
-        let bytes =
-            std::fs::read(&icon_path).unwrap_or_else(|_| crate::consts::PNG_ICON_BYTES.to_vec());
         // Decode PNG to RGBA
-        let decoder = png::Decoder::new(std::io::Cursor::new(&bytes));
+        let decoder = png::Decoder::new(std::io::Cursor::new(bytes));
         let mut reader = decoder.read_info().unwrap();
         let mut buf = vec![0; reader.output_buffer_size().unwrap()];
         let info = reader.next_frame(&mut buf).unwrap();
@@ -383,15 +377,13 @@ fn run() -> anyhow::Result<()> {
                     rebuild_menu(&mut state);
                 }
 
+                #[cfg(target_os = "windows")]
                 if result.restart_onedrive {
-                    #[cfg(target_os = "windows")]
-                    {
-                        EXECUTOR
-                            .spawn(async {
-                                smol::unblock(crate::platform::restart_onedrive).await;
-                            })
-                            .detach();
-                    }
+                    EXECUTOR
+                        .spawn(async {
+                            smol::unblock(crate::platform::restart_onedrive).await;
+                        })
+                        .detach();
                 }
 
                 match result.update_action {

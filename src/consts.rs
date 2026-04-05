@@ -1,10 +1,27 @@
 pub const APP_NAME: &str = "Clipboard Sync";
-pub const APP_AUMID: &str = "FelipeSantos.ClipboardSync";
 pub const APP_UID: &str = "72812af2-6bcc-40d9-b35d-0b43e72ac346";
 pub const STATE_FILE_NAME: &str = "ClipboardSyncState.json";
 pub const LOG_FILE_NAME: &str = "ClipboardSync.log";
-pub const PNG_ICON_BYTES: &[u8] = include_bytes!("../resources/appicons/png/icon.png");
-pub const PNG_ICON_FILE_NAME: &str = "ClipboardSync.png";
+
+// App identity and icon constants used for Windows AUMID / toast notifications.
+#[cfg(target_os = "windows")]
+pub const APP_AUMID: &str = "FelipeSantos.ClipboardSync";
+#[cfg(target_os = "windows")]
+pub const APP_ICON_PNG_BYTES: &[u8] = include_bytes!("../resources/appicons/png/icon.png");
+#[cfg(target_os = "windows")]
+pub const APP_ICON_PNG_FILE_NAME: &str = "ClipboardSync.png";
+
+// Embedded tray icons for non-Windows.
+#[cfg(not(target_os = "windows"))]
+pub const WORKING_TRAY_ICON_BYTES: &[u8] = include_bytes!("../resources/trayicons/png/working.png");
+#[cfg(not(target_os = "windows"))]
+pub const SENT_TRAY_ICON_BYTES: &[u8] = include_bytes!("../resources/trayicons/png/sent.png");
+#[cfg(not(target_os = "windows"))]
+pub const RECEIVED_TRAY_ICON_BYTES: &[u8] =
+    include_bytes!("../resources/trayicons/png/received.png");
+#[cfg(not(target_os = "windows"))]
+pub const SUSPENDED_TRAY_ICON_BYTES: &[u8] =
+    include_bytes!("../resources/trayicons/png/suspended.png");
 
 pub const GITHUB_REPO_URL: &str = "https://github.com/felipecrs/clipboard-sync";
 pub const GITHUB_RELEASE_ASSET: &str = "ClipboardSync.exe";

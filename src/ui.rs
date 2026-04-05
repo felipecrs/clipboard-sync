@@ -24,6 +24,7 @@ pub enum MenuAction {
     SetSyncCommand,
     OpenSyncFolder,
     OpenAppFolder,
+    #[cfg(target_os = "windows")]
     RestartOneDrive,
     Reinitialize,
     CheckForUpdates,
@@ -43,6 +44,7 @@ pub struct MenuEventResult {
     pub rebuild_menu: bool,
     pub quit: bool,
     pub update_action: UpdateAction,
+    #[cfg(target_os = "windows")]
     pub restart_onedrive: bool,
 }
 
@@ -60,6 +62,7 @@ pub fn handle_menu_event(
         rebuild_menu: false,
         quit: false,
         update_action: UpdateAction::None,
+        #[cfg(target_os = "windows")]
         restart_onedrive: false,
     };
 
@@ -151,6 +154,7 @@ pub fn handle_menu_event(
         MenuAction::Reinitialize => {
             result.save_and_reload = true;
         }
+        #[cfg(target_os = "windows")]
         MenuAction::RestartOneDrive => {
             result.restart_onedrive = true;
         }
