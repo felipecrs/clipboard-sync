@@ -26,6 +26,7 @@ log = "0.4.29"
 notify = "8.2.0"
 notify-rust = "4.13.1"
 open = "5.3.3"
+png = "0.18.1"
 regex-lite = "0.1.9"
 semver = "1.0.28"
 serde = { version = "1.0.228", features = ["derive"] }

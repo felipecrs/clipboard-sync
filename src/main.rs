@@ -141,11 +141,12 @@ fn get_tray_icon(state: TrayIconState) -> tray_icon::Icon {
         let icon_path = get_executable_directory()
             .join("resources/trayicons/png")
             .join(format!("{icon_name}.png"));
-        let bytes = std::fs::read(&icon_path).unwrap_or_else(|_| crate::consts::PNG_ICON_BYTES.to_vec());
+        let bytes =
+            std::fs::read(&icon_path).unwrap_or_else(|_| crate::consts::PNG_ICON_BYTES.to_vec());
         // Decode PNG to RGBA
         let decoder = png::Decoder::new(std::io::Cursor::new(&bytes));
         let mut reader = decoder.read_info().unwrap();
-        let mut buf = vec![0; reader.output_buffer_size()];
+        let mut buf = vec![0; reader.output_buffer_size().unwrap()];
         let info = reader.next_frame(&mut buf).unwrap();
         buf.truncate(info.buffer_size());
         tray_icon::Icon::from_rgba(buf, info.width, info.height).unwrap()
