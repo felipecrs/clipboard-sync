@@ -48,3 +48,26 @@ pub fn send_notification(
         .map_err(|e| anyhow::anyhow!("failed to show notification: {e:#}"))?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn is_directory_writable_with_writable_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(is_directory_writable(dir.path()));
+    }
+
+    #[test]
+    fn is_directory_writable_with_nonexistent_dir() {
+        let path = std::path::Path::new("/tmp/nonexistent_desloppify_dir_test_xyz");
+        assert!(!is_directory_writable(path));
+    }
+
+    #[test]
+    fn init_platform_succeeds() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(init_platform(dir.path()).is_ok());
+    }
+}
