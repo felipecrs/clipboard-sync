@@ -1,3 +1,6 @@
+mod fs_watcher;
+mod tray;
+
 use crate::clipboard::{
     ClipboardDedupState, clean_files, now_ms, parse_clipboard_filename, read_clipboard_from_file,
     write_clipboard_to_file,
@@ -5,18 +8,18 @@ use crate::clipboard::{
 use crate::config::{PersistentState, WatchMode, save_state};
 use crate::consts::{
     APP_NAME, APP_UID, CLIPBOARD_DEBOUNCE_MS, CLIPBOARD_WRITE_DELAY_MS, CURRENT_VERSION,
-    FS_WATCHER_POLL_INTERVAL_SECS, ICON_FLASH_DURATION_SECS, IDLE_TIMEOUT_SECS,
+    ICON_FLASH_DURATION_SECS, IDLE_TIMEOUT_SECS,
     IS_RECEIVING_FILE_SUFFIX, KEEP_ALIVE_INTERVAL_SECS, SYNC_COMMAND_WAIT_SECS,
 };
 use crate::notification::log_and_notify_error;
 use crate::platform::{NotificationDuration, send_notification};
 use crate::sync_command::SyncCommand;
-use crate::types::*;
+use crate::types::{ClipboardOrigin, TrayIconState, UserEvent};
 use crate::ui::{MenuIdMap, UpdateAction, handle_menu_event, rebuild_tray_menu};
 use crate::update::{self, UpdateInfo};
 use crate::EXECUTOR;
-use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use clipboard_rs::{ClipboardHandler, ClipboardWatcher, ClipboardWatcherContext, WatcherShutdown};
+use notify::Watcher;
 use smol::Task;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -132,7 +135,7 @@ impl AppState {
         match TrayIconBuilder::new()
             .with_menu(Box::new(self.tray_menu.clone()))
             .with_tooltip(&tooltip)
-            .with_icon(get_tray_icon(TrayIconState::Suspended))
+            .with_icon(tray::get_tray_icon(TrayIconState::Suspended))
             .with_id(APP_UID)
             .build()
         {
@@ -263,46 +266,8 @@ impl AppState {
         sync_folder: &Path,
         watch_mode: &WatchMode,
     ) {
-        let p = proxy.clone();
-        let sf = sync_folder.to_path_buf();
-        let hn = self.hostname.clone();
-
-        let event_handler = move |res: Result<notify::Event, notify::Error>| {
-            handle_fs_event(res, &sf, &hn, &p);
-        };
-
-        let watcher: Option<Box<dyn Watcher + Send>> = if *watch_mode == WatchMode::Polling {
-            let config = notify::Config::default()
-                .with_poll_interval(Duration::from_secs(FS_WATCHER_POLL_INTERVAL_SECS));
-            match notify::PollWatcher::new(event_handler, config) {
-                Ok(mut w) => {
-                    if let Err(e) = w.watch(sync_folder, RecursiveMode::Recursive) {
-                        log::error!("Failed to watch sync folder: {e}");
-                    }
-                    Some(Box::new(w))
-                }
-                Err(e) => {
-                    log::error!("Failed to create poll watcher: {e}");
-                    None
-                }
-            }
-        } else {
-            let config = notify::Config::default();
-            match RecommendedWatcher::new(event_handler, config) {
-                Ok(mut w) => {
-                    if let Err(e) = w.watch(sync_folder, RecursiveMode::Recursive) {
-                        log::error!("Failed to watch sync folder: {e}");
-                    }
-                    Some(Box::new(w))
-                }
-                Err(e) => {
-                    log::error!("Failed to create native watcher: {e}");
-                    None
-                }
-            }
-        };
-
-        self._fs_watcher = watcher;
+        self._fs_watcher =
+            fs_watcher::create_watcher(proxy, sync_folder, &self.hostname, watch_mode);
     }
 
     pub fn uninitialize(&mut self, reason: &str) {
@@ -635,7 +600,7 @@ impl AppState {
         }
         self.current_icon = icon;
         if let Some(handle) = &self.tray_icon {
-            let _ = handle.set_icon(Some(get_tray_icon(icon)));
+            let _ = handle.set_icon(Some(tray::get_tray_icon(icon)));
         }
     }
 
@@ -663,109 +628,34 @@ impl AppState {
     }
 }
 
-fn get_tray_icon(state: TrayIconState) -> tray_icon::Icon {
-    #[cfg(target_os = "windows")]
-    {
-        let resource_name = match state {
-            TrayIconState::Working => "working-icon",
-            TrayIconState::Sent => "sent-icon",
-            TrayIconState::Received => "received-icon",
-            TrayIconState::Suspended => "suspended-icon",
-        };
-        tray_icon::Icon::from_resource_name(resource_name, None).unwrap()
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let bytes = match state {
-            TrayIconState::Working => crate::consts::WORKING_TRAY_ICON_BYTES,
-            TrayIconState::Sent => crate::consts::SENT_TRAY_ICON_BYTES,
-            TrayIconState::Received => crate::consts::RECEIVED_TRAY_ICON_BYTES,
-            TrayIconState::Suspended => crate::consts::SUSPENDED_TRAY_ICON_BYTES,
-        };
-        // Decode PNG to RGBA
-        let decoder = png::Decoder::new(std::io::Cursor::new(bytes));
-        let mut reader = decoder.read_info().unwrap();
-        let mut buf = vec![0; reader.output_buffer_size().unwrap()];
-        let info = reader.next_frame(&mut buf).unwrap();
-        buf.truncate(info.buffer_size());
-        tray_icon::Icon::from_rgba(buf, info.width, info.height).unwrap()
-    }
-}
+
 
 fn write_keep_alive(sync_folder: &Path, hostname: &str) {
     let path = sync_folder.join(format!("{hostname}{IS_RECEIVING_FILE_SUFFIX}"));
     let _ = std::fs::write(&path, format!("{}", now_ms()));
 }
 
-fn handle_fs_event(
-    res: Result<notify::Event, notify::Error>,
-    sync_folder: &Path,
-    hostname: &str,
-    proxy: &EventLoopProxy<UserEvent>,
-) {
-    match res {
-        Ok(event) => {
-            if event.kind.is_create() || event.kind.is_modify() {
-                for path in event.paths {
-                    // Skip temporary files (OneDrive creates ~RFxxxx.TMP files)
-                    let name = path
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .to_string();
-                    if name.contains("~RF") && name.ends_with(".TMP") {
-                        continue;
-                    }
 
-                    if let Some(parsed) = parse_clipboard_filename(
-                        &path,
-                        sync_folder,
-                        hostname,
-                        Some(ClipboardOrigin::Others),
-                    ) {
-                        let _ = proxy.send_event(UserEvent::ClipboardFileDetected(parsed.path));
-                    }
-                }
+/// Spawn a detached async task that sends an event every `interval`.
+fn spawn_periodic_event(
+    proxy: &EventLoopProxy<UserEvent>,
+    interval: Duration,
+    make_event: fn() -> UserEvent,
+) {
+    let p = proxy.clone();
+    EXECUTOR
+        .spawn(async move {
+            loop {
+                smol::Timer::after(interval).await;
+                let _ = p.send_event(make_event());
             }
-        }
-        Err(e) => {
-            log::error!("File watcher error: {e}");
-        }
-    }
+        })
+        .detach();
 }
 
 /// Spawn always-running periodic async tasks that send events to the main event loop.
 pub fn spawn_periodic_tasks(proxy: &EventLoopProxy<UserEvent>) {
-    // Folder access check (every 1s)
-    let p = proxy.clone();
-    EXECUTOR
-        .spawn(async move {
-            loop {
-                smol::Timer::after(Duration::from_secs(1)).await;
-                let _ = p.send_event(UserEvent::CheckFolderAccess);
-            }
-        })
-        .detach();
-
-    // Idle detection (every 1s)
-    let p = proxy.clone();
-    EXECUTOR
-        .spawn(async move {
-            loop {
-                smol::Timer::after(Duration::from_secs(1)).await;
-                let _ = p.send_event(UserEvent::CheckIdleState);
-            }
-        })
-        .detach();
-
-    // Sync command health check (every 1s)
-    let p = proxy.clone();
-    EXECUTOR
-        .spawn(async move {
-            loop {
-                smol::Timer::after(Duration::from_secs(1)).await;
-                let _ = p.send_event(UserEvent::CheckSyncCommand);
-            }
-        })
-        .detach();
+    spawn_periodic_event(proxy, Duration::from_secs(1), || UserEvent::CheckFolderAccess);
+    spawn_periodic_event(proxy, Duration::from_secs(1), || UserEvent::CheckIdleState);
+    spawn_periodic_event(proxy, Duration::from_secs(1), || UserEvent::CheckSyncCommand);
 }

@@ -48,6 +48,8 @@ pub fn handle_menu_event(
         None => return result,
     };
 
+    log::info!("Menu action: {}", info.name);
+
     match &info.action {
         MenuAction::ToggleSendTexts => {
             state.send_texts = !state.send_texts;

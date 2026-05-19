@@ -5,7 +5,9 @@ pub use event_handler::{UpdateAction, handle_menu_event};
 pub use menu_builder::rebuild_tray_menu;
 
 use std::collections::HashMap;
-use tray_icon::menu::{Menu, MenuId, MenuItemKind};
+use tray_icon::menu::MenuId;
+#[cfg(test)]
+use tray_icon::menu::{Menu, MenuItemKind};
 
 #[derive(Debug)]
 pub enum MenuAction {
@@ -35,18 +37,19 @@ pub enum MenuAction {
 
 #[derive(Debug)]
 pub struct MenuItemInfo {
-    #[allow(dead_code)]
     pub name: String,
     pub action: MenuAction,
 }
 
 pub type MenuIdMap = HashMap<MenuId, MenuItemInfo>;
 
-#[allow(dead_code)]
+/// Find a menu item by its ID, searching recursively through submenus.
+#[cfg(test)]
 pub fn find_menu_item(menu: &Menu, id: &MenuId) -> Option<MenuItemKind> {
     find_in_items(&menu.items(), id)
 }
 
+#[cfg(test)]
 fn find_in_items(items: &[MenuItemKind], id: &MenuId) -> Option<MenuItemKind> {
     for item in items {
         if item.id() == id {
