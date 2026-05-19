@@ -131,9 +131,7 @@ pub fn clean_files(sync_folder: &Path, hostname: &str) {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
 
-        let parsed = parse_clipboard_filename(&path, sync_folder, hostname, None);
-
-        if parsed.is_none() {
+        let Some(parsed) = parse_clipboard_filename(&path, sync_folder, hostname, None) else {
             // Skip is-receiving marker files (cleaned on shutdown)
             if is_receiving_file(&name) {
                 continue;
@@ -150,9 +148,7 @@ pub fn clean_files(sync_folder: &Path, hostname: &str) {
                 delete_file_or_folder(&path);
             }
             continue;
-        }
-
-        let parsed = parsed.unwrap();
+        };
 
         let threshold_ms = match parsed.origin {
             ClipboardOrigin::Myself => SELF_CLEAN_THRESHOLD_SECS * 1000,
@@ -295,24 +291,41 @@ pub fn write_clipboard_to_file(
         .map(|lb| beat - lb < crate::consts::DUPLICATE_WINDOW_MS)
         .unwrap_or(false);
 
+    // Dedup check + write in a single pass per content type
     match content_type {
         ClipboardContentType::Text => {
-            let ct = clipboard_text.as_ref().unwrap();
+            let ct = clipboard_text.unwrap();
             if ct.is_empty() {
                 return false;
             }
             if recent {
                 if let Some(lr) = last_text_read
-                    && lr.equals(ct)
+                    && lr.equals(&ct)
                 {
                     return false;
                 }
                 if let Some(lw) = last_text_written
-                    && lw.equals(ct)
+                    && lw.equals(&ct)
                 {
                     return false;
                 }
             }
+
+            // Write
+            let dest = sync_folder.join(format!("{beat}-{hostname}.text.json"));
+            let json = match serde_json::to_string_pretty(&ct) {
+                Ok(json) => json,
+                Err(e) => {
+                    log::error!("Error serializing clipboard text: {e}");
+                    return false;
+                }
+            };
+            if let Err(e) = std::fs::write(&dest, json) {
+                log::error!("Error writing clipboard text file: {e}");
+                return false;
+            }
+            *last_text_written = Some(ct);
+            log::info!("Clipboard written to {}", dest.display());
         }
         ClipboardContentType::Image => {
             let sha = clipboard_image_sha256.as_ref().unwrap();
@@ -328,9 +341,19 @@ pub fn write_clipboard_to_file(
                     return false;
                 }
             }
+
+            // Write
+            let dest = sync_folder.join(format!("{beat}-{hostname}.png"));
+            let bytes = clipboard_image_bytes.unwrap();
+            if let Err(e) = std::fs::write(&dest, &bytes) {
+                log::error!("Error writing clipboard image file: {e}");
+                return false;
+            }
+            *last_image_sha256_written = clipboard_image_sha256;
+            log::info!("Clipboard written to {}", dest.display());
         }
         ClipboardContentType::Files => {
-            let files = clipboard_file_paths.as_ref().unwrap();
+            let files = clipboard_file_paths.unwrap();
             if files.is_empty() {
                 return false;
             }
@@ -352,44 +375,8 @@ pub fn write_clipboard_to_file(
                 );
                 return false;
             }
-        }
-    }
 
-    *last_beat = Some(beat);
-
-    // Write the clipboard to disk
-    match content_type {
-        ClipboardContentType::Text => {
-            let dest = sync_folder.join(format!("{beat}-{hostname}.text.json"));
-            let ct = clipboard_text.unwrap();
-            match serde_json::to_string_pretty(&ct) {
-                Ok(json) => {
-                    if let Err(e) = std::fs::write(&dest, json) {
-                        log::error!("Error writing clipboard text file: {e}");
-                        return false;
-                    }
-                    *last_text_written = Some(ct);
-                }
-                Err(e) => {
-                    log::error!("Error serializing clipboard text: {e}");
-                    return false;
-                }
-            }
-            log::info!("Clipboard written to {}", dest.display());
-        }
-        ClipboardContentType::Image => {
-            let dest = sync_folder.join(format!("{beat}-{hostname}.png"));
-            let bytes = clipboard_image_bytes.unwrap();
-            if let Err(e) = std::fs::write(&dest, &bytes) {
-                log::error!("Error writing clipboard image file: {e}");
-                return false;
-            }
-            *last_image_sha256_written = clipboard_image_sha256;
-            log::info!("Clipboard written to {}", dest.display());
-        }
-        ClipboardContentType::Files => {
-            let files = clipboard_file_paths.unwrap();
-            let paths: Vec<PathBuf> = files.iter().map(PathBuf::from).collect();
+            // Write
             let files_count = get_total_number_of_files(&paths);
             let dest = sync_folder.join(format!("{beat}-{hostname}.{files_count}_files"));
             if let Err(e) = std::fs::create_dir(&dest) {
@@ -415,6 +402,7 @@ pub fn write_clipboard_to_file(
         }
     }
 
+    *last_beat = Some(beat);
     true
 }
 
@@ -433,87 +421,17 @@ pub fn read_clipboard_from_file(
     let beat = now_ms();
     let file = &parsed.path;
 
-    // Read the new content from file
-    let mut new_text: Option<ClipboardText> = None;
-    let mut new_image_bytes: Option<Vec<u8>> = None;
-    let mut new_image_sha256: Option<String> = None;
-    let mut new_file_paths: Option<Vec<String>> = None;
-
-    match parsed.content_type {
-        ClipboardContentType::Text => {
-            if !state.receive_texts {
-                return false;
-            }
-            match std::fs::read_to_string(file) {
-                Ok(content) => match serde_json::from_str::<ClipboardText>(&content) {
-                    Ok(ct) => new_text = Some(ct),
-                    Err(e) => {
-                        log::error!("Error parsing clipboard text {}: {e}", file.display());
-                        return false;
-                    }
-                },
-                Err(e) => {
-                    log::error!("Error reading clipboard text {}: {e}", file.display());
-                    return false;
-                }
-            }
-        }
-        ClipboardContentType::Image => {
-            if !state.receive_images {
-                return false;
-            }
-            match std::fs::read(file) {
-                Ok(bytes) => {
-                    let sha = calculate_sha256(&bytes);
-                    new_image_bytes = Some(bytes);
-                    new_image_sha256 = Some(sha);
-                }
-                Err(e) => {
-                    log::error!("Error reading clipboard image {}: {e}", file.display());
-                    return false;
-                }
-            }
-        }
-        ClipboardContentType::Files => {
-            if !state.receive_files {
-                return false;
-            }
-            let expected_count = match parsed.files_count {
-                Some(c) => c,
-                None => {
-                    log::warn!(
-                        "Could not read the number of files in {}. Skipping...",
-                        file.display()
-                    );
-                    return false;
-                }
-            };
-
-            let actual_count = get_total_number_of_files(std::slice::from_ref(file));
-            if actual_count != expected_count {
-                log::info!(
-                    "Not all files are yet present in _files folder. Current: {actual_count}, expected: {expected_count}. Skipping..."
-                );
-                return false;
-            }
-
-            match std::fs::read_dir(file) {
-                Ok(entries) => {
-                    let paths: Vec<String> = entries
-                        .flatten()
-                        .map(|e| e.path().to_string_lossy().to_string())
-                        .collect();
-                    new_file_paths = Some(paths);
-                }
-                Err(e) => {
-                    log::error!("Error reading clipboard files dir {}: {e}", file.display());
-                    return false;
-                }
-            }
-        }
+    // Skip if the beat is older than what was already processed
+    if let Some(lb) = *last_beat
+        && parsed.beat < lb
+    {
+        log::info!(
+            "Skipping reading clipboard from {} as a newer clipboard was already processed",
+            file.display()
+        );
+        return false;
     }
 
-    // Read current clipboard for duplicate detection
     let ctx = match ClipboardContext::new() {
         Ok(ctx) => ctx,
         Err(e) => {
@@ -522,13 +440,33 @@ pub fn read_clipboard_from_file(
         }
     };
 
-    // Duplicate detection: compare against current clipboard
+    // Read from file → dedup against current clipboard → set clipboard
     match parsed.content_type {
         ClipboardContentType::Text => {
-            let nt = new_text.as_ref().unwrap();
-            if nt.is_empty() {
+            if !state.receive_texts {
                 return false;
             }
+
+            // Read
+            let content = match std::fs::read_to_string(file) {
+                Ok(c) => c,
+                Err(e) => {
+                    log::error!("Error reading clipboard text {}: {e}", file.display());
+                    return false;
+                }
+            };
+            let ct: ClipboardText = match serde_json::from_str(&content) {
+                Ok(ct) => ct,
+                Err(e) => {
+                    log::error!("Error parsing clipboard text {}: {e}", file.display());
+                    return false;
+                }
+            };
+            if ct.is_empty() {
+                return false;
+            }
+
+            // Dedup: compare against current clipboard
             if ctx.has(ContentFormat::Text)
                 || ctx.has(ContentFormat::Html)
                 || ctx.has(ContentFormat::Rtf)
@@ -543,59 +481,12 @@ pub fn read_clipboard_from_file(
                 if ctx.has(ContentFormat::Rtf) {
                     current.rtf = ctx.get_rich_text().ok();
                 }
-                if current.equals(nt) {
+                if current.equals(&ct) {
                     return false;
                 }
             }
-        }
-        ClipboardContentType::Image => {
-            let sha = new_image_sha256.as_ref().unwrap();
-            if ctx.has(ContentFormat::Image)
-                && let Ok(img) = ctx.get_image()
-                && let Ok(png) = img.to_png()
-            {
-                let current_sha = calculate_sha256(png.get_bytes());
-                if current_sha == *sha {
-                    return false;
-                }
-            }
-        }
-        ClipboardContentType::Files => {
-            let nf = new_file_paths.as_ref().unwrap();
-            if ctx.has(ContentFormat::Files)
-                && let Ok(current_files) = ctx.get_files()
-            {
-                let mut a = nf.clone();
-                let mut b = current_files;
-                a.sort();
-                b.sort();
-                if a == b {
-                    return false;
-                }
-            }
-        }
-    }
 
-    // Skip if the beat is older than what was already processed
-    if let Some(lb) = *last_beat
-        && parsed.beat < lb
-    {
-        log::info!(
-            "Skipping reading clipboard from {} as a newer clipboard was already processed",
-            file.display()
-        );
-        return false;
-    }
-
-    *last_beat = Some(beat);
-
-    // Set clipboard
-    match parsed.content_type {
-        ClipboardContentType::Text => {
-            let ct = new_text.unwrap();
-            // Set each format that's available
-            // clipboard-rs's set() clears and sets, but we need to set multiple formats.
-            // Use the set() method with ClipboardContent variants.
+            // Set clipboard
             use clipboard_rs::ClipboardContent;
             let mut contents = Vec::new();
             if let Some(ref text) = ct.text {
@@ -614,7 +505,32 @@ pub fn read_clipboard_from_file(
             *last_text_read = Some(ct);
         }
         ClipboardContentType::Image => {
-            let bytes = new_image_bytes.unwrap();
+            if !state.receive_images {
+                return false;
+            }
+
+            // Read
+            let bytes = match std::fs::read(file) {
+                Ok(b) => b,
+                Err(e) => {
+                    log::error!("Error reading clipboard image {}: {e}", file.display());
+                    return false;
+                }
+            };
+            let sha = calculate_sha256(&bytes);
+
+            // Dedup: compare against current clipboard
+            if ctx.has(ContentFormat::Image)
+                && let Ok(img) = ctx.get_image()
+                && let Ok(png) = img.to_png()
+            {
+                let current_sha = calculate_sha256(png.get_bytes());
+                if current_sha == sha {
+                    return false;
+                }
+            }
+
+            // Set clipboard
             match clipboard_rs::common::RustImageData::from_bytes(&bytes) {
                 Ok(img) => {
                     if let Err(e) = ctx.set_image(img) {
@@ -627,10 +543,58 @@ pub fn read_clipboard_from_file(
                     return false;
                 }
             }
-            *last_image_sha256_read = new_image_sha256;
+            *last_image_sha256_read = Some(sha);
         }
         ClipboardContentType::Files => {
-            let file_paths = new_file_paths.unwrap();
+            if !state.receive_files {
+                return false;
+            }
+
+            // Validate file count
+            let expected_count = match parsed.files_count {
+                Some(c) => c,
+                None => {
+                    log::warn!(
+                        "Could not read the number of files in {}. Skipping...",
+                        file.display()
+                    );
+                    return false;
+                }
+            };
+            let actual_count = get_total_number_of_files(std::slice::from_ref(file));
+            if actual_count != expected_count {
+                log::info!(
+                    "Not all files are yet present in _files folder. Current: {actual_count}, expected: {expected_count}. Skipping..."
+                );
+                return false;
+            }
+
+            // Read
+            let file_paths: Vec<String> = match std::fs::read_dir(file) {
+                Ok(entries) => entries
+                    .flatten()
+                    .map(|e| e.path().to_string_lossy().to_string())
+                    .collect(),
+                Err(e) => {
+                    log::error!("Error reading clipboard files dir {}: {e}", file.display());
+                    return false;
+                }
+            };
+
+            // Dedup: compare against current clipboard
+            if ctx.has(ContentFormat::Files)
+                && let Ok(current_files) = ctx.get_files()
+            {
+                let mut a = file_paths.clone();
+                let mut b = current_files;
+                a.sort();
+                b.sort();
+                if a == b {
+                    return false;
+                }
+            }
+
+            // Set clipboard
             if let Err(e) = ctx.set_files(file_paths.clone()) {
                 log::error!("Error setting clipboard files: {e}");
                 return false;
@@ -639,6 +603,7 @@ pub fn read_clipboard_from_file(
         }
     }
 
+    *last_beat = Some(beat);
     log::info!("Clipboard was read from {}", file.display());
     true
 }
