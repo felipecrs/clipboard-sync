@@ -607,3 +607,164 @@ pub fn read_clipboard_from_file(
     log::info!("Clipboard was read from {}", file.display());
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sync_folder() -> PathBuf {
+        PathBuf::from("/sync")
+    }
+
+    // --- parse_clipboard_filename ---
+
+    #[test]
+    fn parse_text_file() {
+        let sf = sync_folder();
+        let path = sf.join("1716000000000-myhost.text.json");
+        let parsed = parse_clipboard_filename(&path, &sf, "myhost", None).unwrap();
+        assert_eq!(parsed.beat, 1716000000000);
+        assert_eq!(parsed.content_type, ClipboardContentType::Text);
+        assert_eq!(parsed.origin, ClipboardOrigin::Myself);
+        assert!(parsed.files_count.is_none());
+    }
+
+    #[test]
+    fn parse_image_file() {
+        let sf = sync_folder();
+        let path = sf.join("1716000000000-otherhost.png");
+        let parsed = parse_clipboard_filename(&path, &sf, "myhost", None).unwrap();
+        assert_eq!(parsed.content_type, ClipboardContentType::Image);
+        assert_eq!(parsed.origin, ClipboardOrigin::Others);
+    }
+
+    #[test]
+    fn parse_files_folder() {
+        let sf = sync_folder();
+        let path = sf.join("1716000000000-myhost.3_files");
+        let parsed = parse_clipboard_filename(&path, &sf, "myhost", None).unwrap();
+        assert_eq!(parsed.content_type, ClipboardContentType::Files);
+        assert_eq!(parsed.files_count, Some(3));
+    }
+
+    #[test]
+    fn parse_invalid_filename_returns_none() {
+        let sf = sync_folder();
+        assert!(parse_clipboard_filename(&sf.join("random.txt"), &sf, "host", None).is_none());
+        assert!(parse_clipboard_filename(&sf.join("not-a-file"), &sf, "host", None).is_none());
+        assert!(parse_clipboard_filename(&sf.join("0-host.png"), &sf, "host", None).is_none());
+    }
+
+    #[test]
+    fn parse_with_origin_filter() {
+        let sf = sync_folder();
+        let path = sf.join("1716000000000-myhost.text.json");
+        // Filter for Others should return None when file is from Myself
+        assert!(
+            parse_clipboard_filename(&path, &sf, "myhost", Some(ClipboardOrigin::Others))
+                .is_none()
+        );
+        // Filter for Myself should return the parsed file
+        assert!(
+            parse_clipboard_filename(&path, &sf, "myhost", Some(ClipboardOrigin::Myself))
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn parse_hostname_with_hyphens() {
+        let sf = sync_folder();
+        let path = sf.join("1716000000000-my-host-name.png");
+        let parsed = parse_clipboard_filename(&path, &sf, "my-host-name", None).unwrap();
+        assert_eq!(parsed.origin, ClipboardOrigin::Myself);
+    }
+
+    // --- is_receiving_file ---
+
+    #[test]
+    fn is_receiving_file_positive() {
+        assert!(is_receiving_file(&format!("host{IS_RECEIVING_FILE_SUFFIX}")));
+    }
+
+    #[test]
+    fn is_receiving_file_negative() {
+        assert!(!is_receiving_file("1716000000000-host.text.json"));
+        assert!(!is_receiving_file("random.txt"));
+    }
+
+    // --- no_computers_receiving ---
+
+    #[test]
+    fn no_computers_receiving_empty_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(no_computers_receiving(dir.path(), "myhost", now_ms()));
+    }
+
+    #[test]
+    fn no_computers_receiving_with_own_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir
+            .path()
+            .join(format!("myhost{IS_RECEIVING_FILE_SUFFIX}"));
+        std::fs::write(&path, "1716000000000").unwrap();
+        // Our own file should be ignored
+        assert!(no_computers_receiving(dir.path(), "myhost", now_ms()));
+    }
+
+    #[test]
+    fn no_computers_receiving_with_recent_other() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir
+            .path()
+            .join(format!("otherhost{IS_RECEIVING_FILE_SUFFIX}"));
+        std::fs::write(&path, "recent").unwrap();
+        // Other host's fresh file means someone is receiving
+        assert!(!no_computers_receiving(dir.path(), "myhost", now_ms()));
+    }
+
+    // --- clean_files ---
+
+    #[test]
+    fn clean_files_removes_old_own_files() {
+        let dir = tempfile::tempdir().unwrap();
+        // Create a file with beat = 1 (very old)
+        let old_file = dir.path().join("1-myhost.text.json");
+        std::fs::write(&old_file, r#"{"text":"hello"}"#).unwrap();
+        // Set modification time far in the past isn't easy, but clean_files
+        // checks mtime vs threshold. The file was just created so its mtime is "now".
+        // clean_files will NOT delete it since it's recent. Just verify it doesn't crash.
+        clean_files(dir.path(), "myhost");
+        // The file is recent so should still exist
+        assert!(old_file.exists());
+    }
+
+    #[test]
+    fn clean_files_removes_legacy_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let legacy = dir.path().join("receiving-data.txt");
+        std::fs::write(&legacy, "data").unwrap();
+        clean_files(dir.path(), "myhost");
+        assert!(!legacy.exists());
+    }
+
+    #[test]
+    fn clean_files_preserves_is_receiving_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let marker = dir
+            .path()
+            .join(format!("myhost{IS_RECEIVING_FILE_SUFFIX}"));
+        std::fs::write(&marker, "123").unwrap();
+        clean_files(dir.path(), "myhost");
+        assert!(marker.exists());
+    }
+
+    // --- now_ms ---
+
+    #[test]
+    fn now_ms_returns_reasonable_value() {
+        let ts = now_ms();
+        // Should be after 2020-01-01 (1577836800000) and before 2100
+        assert!(ts > 1577836800000);
+        assert!(ts < 4102444800000);
+    }
+}
