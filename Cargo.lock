@@ -415,7 +415,6 @@ dependencies = [
  "auto-launch",
  "clipboard-rs",
  "dunce",
- "faccess",
  "gethostname",
  "log",
  "notify",
@@ -437,7 +436,6 @@ dependencies = [
  "ureq",
  "user-idle2",
  "walkdir",
- "widestring 1.2.1",
  "win32job",
  "windows 0.62.2",
  "windows-core 0.62.2",
@@ -766,17 +764,6 @@ checksum = "8be9f3dfaaffdae2972880079a491a1a8bb7cbed0b8dd7a347f668b4150a3b93"
 dependencies = [
  "event-listener",
  "pin-project-lite",
-]
-
-[[package]]
-name = "faccess"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59ae66425802d6a903e268ae1a08b8c38ba143520f227a205edf4e9c7e3e26d5"
-dependencies = [
- "bitflags 1.3.2",
- "libc",
- "winapi",
 ]
 
 [[package]]
@@ -2778,7 +2765,7 @@ dependencies = [
  "libc",
  "nix 0.23.2",
  "thiserror 1.0.69",
- "widestring 0.4.3",
+ "widestring",
  "winapi",
 ]
 
@@ -3485,12 +3472,6 @@ name = "widestring"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c168940144dd21fd8046987c16a46a33d5fc84eec29ef9dcddc2ac9e31526b7c"
-
-[[package]]
-name = "widestring"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72069c3113ab32ab29e5584db3c6ec55d416895e60715417b5b883a357c3e471"
 
 [[package]]
 name = "win32job"

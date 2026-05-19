@@ -1,3 +1,4 @@
+#[derive(Clone, Copy)]
 pub enum NotificationDuration {
     Short,
     Long,
@@ -14,11 +15,23 @@ pub fn init_platform(_executable_directory: &std::path::Path) -> anyhow::Result<
     Ok(())
 }
 
+#[cfg(not(target_os = "windows"))]
+pub fn is_directory_writable(dir: &std::path::Path) -> bool {
+    let test_path = dir.join(".clipboard_sync_write_test");
+    match std::fs::write(&test_path, b"") {
+        Ok(()) => {
+            let _ = std::fs::remove_file(&test_path);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
 pub fn send_notification(
     title: &str,
     message: &str,
     duration: NotificationDuration,
-) -> Result<(), String> {
+) -> anyhow::Result<()> {
     let timeout = match duration {
         NotificationDuration::Short => notify_rust::Timeout::Default,
         NotificationDuration::Long => notify_rust::Timeout::Milliseconds(25_000),
@@ -30,6 +43,8 @@ pub fn send_notification(
     #[cfg(target_os = "windows")]
     notification.app_id(crate::consts::APP_AUMID);
 
-    notification.show().map_err(|e| e.to_string())?;
+    notification
+        .show()
+        .map_err(|e| anyhow::anyhow!("failed to show notification: {e:#}"))?;
     Ok(())
 }

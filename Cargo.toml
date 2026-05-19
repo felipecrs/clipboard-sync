@@ -20,7 +20,6 @@ anyhow = "1.0.102"
 auto-launch = "0.6.0"
 clipboard-rs = "0.3.4"
 dunce = "1.0.5"
-faccess = "0.2.4"
 gethostname = "1.1.0"
 log = "0.4.29"
 notify = "8.2.0"
@@ -54,7 +53,6 @@ windows = { version = "0.62.2", features = [
 	"Win32_System_Com",
 	"Win32_UI_Shell",
 ] }
-widestring = "1.2.1"
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
 winresource = "0.1.31"

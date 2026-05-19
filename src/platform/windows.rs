@@ -6,9 +6,10 @@ use windows::core::{HSTRING, Result};
 use windows_registry::CURRENT_USER;
 
 pub fn init_platform(executable_directory: &Path) -> anyhow::Result<()> {
+    // SAFETY: CoInitializeEx is safe to call; first call on this thread.
     unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()? };
     if let Err(e) = setup_app_aumid(executable_directory) {
-        log::warn!("Failed to set up app AUMID: {e}");
+        log::warn!("Failed to set up app AUMID: {e:#}");
     }
     Ok(())
 }
@@ -17,22 +18,39 @@ fn setup_app_aumid(executable_directory: &Path) -> Result<()> {
     let registry_path = format!(r"SOFTWARE\Classes\AppUserModelId\{APP_AUMID}");
     let _ = CURRENT_USER.remove_tree(registry_path.clone());
     let key = CURRENT_USER.create(&registry_path)?;
-    let _ = key.set_string("DisplayName", APP_NAME);
+    if let Err(e) = key.set_string("DisplayName", APP_NAME) {
+        log::warn!("Failed to set AUMID DisplayName: {e:#}");
+    }
 
     // We need an icon file for the AUMID to work properly
     let png_path = executable_directory.join(APP_ICON_PNG_FILE_NAME);
     if let Err(e) = std::fs::write(&png_path, APP_ICON_PNG_BYTES) {
-        log::warn!("Failed to write {APP_ICON_PNG_FILE_NAME} icon: {e}");
+        log::warn!("Failed to write {APP_ICON_PNG_FILE_NAME} icon: {e:#}");
         let _ = key.remove_value("IconUri");
-    } else {
-        let _ = key.set_hstring("IconUri", &png_path.as_path().into());
+    } else if let Err(e) = key.set_hstring("IconUri", &png_path.as_path().into()) {
+        log::warn!("Failed to set AUMID IconUri: {e:#}");
     }
 
+    // SAFETY: APP_AUMID is a valid static string; setting the AUMID is a standard shell API call.
     unsafe {
-        let _ = SetCurrentProcessExplicitAppUserModelID(&HSTRING::from(APP_AUMID));
+        if let Err(e) = SetCurrentProcessExplicitAppUserModelID(&HSTRING::from(APP_AUMID)) {
+            log::warn!("Failed to set explicit AppUserModelID: {e:#}");
+        }
     }
 
     Ok(())
+}
+
+/// Checks if a directory is writable by attempting to create and delete a temp file.
+pub fn is_directory_writable(dir: &Path) -> bool {
+    let test_path = dir.join(".clipboard_sync_write_test");
+    match std::fs::write(&test_path, b"") {
+        Ok(()) => {
+            let _ = std::fs::remove_file(&test_path);
+            true
+        }
+        Err(_) => false,
+    }
 }
 
 /// Restart OneDrive (Windows specific).
@@ -80,7 +98,7 @@ pub fn restart_onedrive() {
             }
         }
         Err(e) => {
-            log::error!("Failed to run OneDrive restart script: {e}");
+            log::error!("Failed to run OneDrive restart script: {e:#}");
         }
     }
 }

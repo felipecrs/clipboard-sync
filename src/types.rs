@@ -94,3 +94,64 @@ pub enum UserEvent {
     /// Auto update check completed.
     UpdateCheckComplete(Option<UpdateInfo>),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clipboard_text_empty_when_all_none() {
+        let ct = ClipboardText::default();
+        assert!(ct.is_empty());
+    }
+
+    #[test]
+    fn clipboard_text_empty_when_all_empty_strings() {
+        let ct = ClipboardText {
+            text: Some(String::new()),
+            html: Some(String::new()),
+            rtf: Some(String::new()),
+        };
+        assert!(ct.is_empty());
+    }
+
+    #[test]
+    fn clipboard_text_not_empty_with_text() {
+        let ct = ClipboardText {
+            text: Some("hello".to_string()),
+            html: None,
+            rtf: None,
+        };
+        assert!(!ct.is_empty());
+    }
+
+    #[test]
+    fn clipboard_text_equals_same() {
+        let a = ClipboardText {
+            text: Some("hello".to_string()),
+            html: Some("<p>hello</p>".to_string()),
+            rtf: None,
+        };
+        let b = ClipboardText {
+            text: Some("hello".to_string()),
+            html: Some("<p>hello</p>".to_string()),
+            rtf: None,
+        };
+        assert!(a.equals(&b));
+    }
+
+    #[test]
+    fn clipboard_text_not_equals_different() {
+        let a = ClipboardText {
+            text: Some("hello".to_string()),
+            html: None,
+            rtf: None,
+        };
+        let b = ClipboardText {
+            text: Some("world".to_string()),
+            html: None,
+            rtf: None,
+        };
+        assert!(!a.equals(&b));
+    }
+}
