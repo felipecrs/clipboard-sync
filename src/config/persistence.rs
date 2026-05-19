@@ -89,13 +89,13 @@ mod tests {
         let path = dir.join("state.json");
 
         let mut state = PersistentState::default();
-        state.folder = Some("/tmp/sync".to_string());
+        state.folder = Some(std::path::PathBuf::from("/tmp/sync"));
         state.check_updates_on_launch = false;
 
         save_state_to(&path, &state).unwrap();
         let loaded = load_state_from(&path).unwrap();
 
-        assert_eq!(loaded.folder, Some("/tmp/sync".to_string()));
+        assert_eq!(loaded.folder, Some(std::path::PathBuf::from("/tmp/sync")));
         assert!(!loaded.check_updates_on_launch);
 
         let _ = fs::remove_dir_all(&dir);
@@ -108,15 +108,15 @@ mod tests {
         let path = dir.join("state.json");
 
         let mut state1 = PersistentState::default();
-        state1.folder = Some("/first".to_string());
+        state1.folder = Some(std::path::PathBuf::from("/first"));
         save_state_to(&path, &state1).unwrap();
 
         let mut state2 = PersistentState::default();
-        state2.folder = Some("/second".to_string());
+        state2.folder = Some(std::path::PathBuf::from("/second"));
         save_state_to(&path, &state2).unwrap();
 
         let loaded = load_state_from(&path).unwrap();
-        assert_eq!(loaded.folder, Some("/second".to_string()));
+        assert_eq!(loaded.folder, Some(std::path::PathBuf::from("/second")));
 
         let _ = fs::remove_dir_all(&dir);
     }

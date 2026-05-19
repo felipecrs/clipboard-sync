@@ -3,6 +3,7 @@ mod persistence;
 pub use persistence::{load_state, save_state};
 
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 /// Watch mode for detecting incoming clipboard files.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -17,7 +18,7 @@ pub enum WatchMode {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PersistentState {
-    pub folder: Option<String>,
+    pub folder: Option<PathBuf>,
     pub send_texts: bool,
     pub send_images: bool,
     pub send_files: bool,
@@ -81,7 +82,7 @@ mod tests {
     #[test]
     fn persistent_state_serialization_roundtrip() {
         let state = PersistentState {
-            folder: Some("/tmp/sync".to_string()),
+            folder: Some(PathBuf::from("/tmp/sync")),
             send_texts: false,
             send_images: true,
             send_files: false,
@@ -97,7 +98,7 @@ mod tests {
         let json = serde_json::to_string_pretty(&state).unwrap();
         let loaded: PersistentState = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(loaded.folder, Some("/tmp/sync".to_string()));
+        assert_eq!(loaded.folder, Some(PathBuf::from("/tmp/sync")));
         assert!(!loaded.send_texts);
         assert!(loaded.send_images);
         assert!(!loaded.send_files);

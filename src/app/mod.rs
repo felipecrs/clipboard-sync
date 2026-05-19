@@ -104,7 +104,7 @@ impl AppState {
         menu_actions: MenuIdMap,
         auto_launch: auto_launch::AutoLaunch,
     ) -> Self {
-        let sync_folder = persistent_state.folder.as_ref().map(PathBuf::from);
+        let sync_folder = persistent_state.folder.clone();
         Self {
             hostname,
             sync_folder,
@@ -170,10 +170,8 @@ impl AppState {
             }
         }
 
-        if self.sync_folder.is_none()
-            && let Some(ref folder) = self.persistent_state.folder
-        {
-            self.sync_folder = Some(PathBuf::from(folder));
+        if self.sync_folder.is_none() {
+            self.sync_folder = self.persistent_state.folder.clone();
         }
 
         let sync_folder = match &self.sync_folder {
@@ -420,7 +418,7 @@ impl AppState {
 
         if result.save_and_reload {
             // Sync folder may have changed via ChangeFolder action
-            self.sync_folder = self.persistent_state.folder.as_ref().map(PathBuf::from);
+            self.sync_folder = self.persistent_state.folder.clone();
             if let Err(e) = save_state(&self.persistent_state) {
                 log_and_notify_error(
                     "Failed to Save State",

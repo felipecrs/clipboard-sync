@@ -118,7 +118,7 @@ pub fn handle_menu_event(
         }
         MenuAction::ChangeFolder => {
             if let Some(folder) = pick_folder() {
-                state.folder = Some(folder);
+                state.folder = Some(std::path::PathBuf::from(folder));
                 result.save_and_reload = true;
             }
         }
