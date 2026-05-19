@@ -11,7 +11,7 @@ pub enum ClipboardContentType {
 }
 
 /// Text clipboard content, may contain plain text, HTML, and RTF.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ClipboardText {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
@@ -26,10 +26,6 @@ impl ClipboardText {
         self.text.as_ref().is_none_or(|t| t.is_empty())
             && self.html.as_ref().is_none_or(|h| h.is_empty())
             && self.rtf.as_ref().is_none_or(|r| r.is_empty())
-    }
-
-    pub fn equals(&self, other: &ClipboardText) -> bool {
-        self.text == other.text && self.html == other.html && self.rtf == other.rtf
     }
 }
 
@@ -137,7 +133,7 @@ mod tests {
             html: Some("<p>hello</p>".to_string()),
             rtf: None,
         };
-        assert!(a.equals(&b));
+        assert_eq!(a, b);
     }
 
     #[test]
@@ -152,6 +148,6 @@ mod tests {
             html: None,
             rtf: None,
         };
-        assert!(!a.equals(&b));
+        assert_ne!(a, b);
     }
 }

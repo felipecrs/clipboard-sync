@@ -431,6 +431,7 @@ dependencies = [
  "single-instance",
  "smol",
  "tao",
+ "tempfile",
  "tinyfiledialogs",
  "tray-icon",
  "ureq",

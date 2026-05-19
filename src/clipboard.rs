@@ -300,12 +300,12 @@ pub fn write_clipboard_to_file(
             }
             if recent {
                 if let Some(lr) = last_text_read
-                    && lr.equals(&ct)
+                    && *lr == ct
                 {
                     return false;
                 }
                 if let Some(lw) = last_text_written
-                    && lw.equals(&ct)
+                    && *lw == ct
                 {
                     return false;
                 }
@@ -481,7 +481,7 @@ pub fn read_clipboard_from_file(
                 if ctx.has(ContentFormat::Rtf) {
                     current.rtf = ctx.get_rich_text().ok();
                 }
-                if current.equals(&ct) {
+                if current == ct {
                     return false;
                 }
             }

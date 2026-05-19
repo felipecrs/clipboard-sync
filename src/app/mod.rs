@@ -503,17 +503,12 @@ impl AppState {
     pub fn handle_folder_check(&mut self, proxy: &EventLoopProxy<UserEvent>) {
         let now = Instant::now();
 
-        // Dynamic interval: check every 1s while waiting for sync command, then every 30s
-        let folder_check_interval = match self.sync_command_started_at {
-            Some(t) if now.duration_since(t) < Duration::from_secs(SYNC_COMMAND_WAIT_SECS) => {
-                Duration::from_secs(1)
-            }
-            Some(_) => {
-                self.sync_command_started_at = None;
-                Duration::from_secs(30)
-            }
-            None => Duration::from_secs(30),
-        };
+        let (check_interval, clear_started) =
+            folder_check_interval(self.sync_command_started_at, now);
+        if clear_started {
+            self.sync_command_started_at = None;
+        }
+        let folder_check_interval = check_interval;
 
         let should_check = self
             .last_folder_check
@@ -605,11 +600,7 @@ impl AppState {
     }
 
     fn set_tray_tooltip(&self, status: &str) {
-        let tooltip = if status.is_empty() {
-            format!("{APP_NAME} v{CURRENT_VERSION}")
-        } else {
-            format!("{APP_NAME} - {status}")
-        };
+        let tooltip = format_tooltip(status);
         if let Some(handle) = &self.tray_icon {
             let _ = handle.set_tooltip(Some(&tooltip));
         }
@@ -635,6 +626,31 @@ fn write_keep_alive(sync_folder: &Path, hostname: &str) {
     let _ = std::fs::write(&path, format!("{}", now_ms()));
 }
 
+/// Compute the folder check interval based on how long the sync command has been running.
+///
+/// Returns `(interval, should_clear_started_at)`.
+fn folder_check_interval(
+    sync_command_started_at: Option<Instant>,
+    now: Instant,
+) -> (Duration, bool) {
+    match sync_command_started_at {
+        Some(t) if now.duration_since(t) < Duration::from_secs(SYNC_COMMAND_WAIT_SECS) => {
+            (Duration::from_secs(1), false)
+        }
+        Some(_) => (Duration::from_secs(30), true),
+        None => (Duration::from_secs(30), false),
+    }
+}
+
+/// Format the tray icon tooltip text.
+fn format_tooltip(status: &str) -> String {
+    if status.is_empty() {
+        format!("{APP_NAME} v{CURRENT_VERSION}")
+    } else {
+        format!("{APP_NAME} - {status}")
+    }
+}
+
 
 /// Spawn a detached async task that sends an event every `interval`.
 fn spawn_periodic_event(
@@ -651,6 +667,61 @@ fn spawn_periodic_event(
             }
         })
         .detach();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn folder_check_interval_no_sync_command() {
+        let (interval, clear) = folder_check_interval(None, Instant::now());
+        assert_eq!(interval, Duration::from_secs(30));
+        assert!(!clear);
+    }
+
+    #[test]
+    fn folder_check_interval_during_wait() {
+        let started = Instant::now();
+        let now = started + Duration::from_secs(1);
+        let (interval, clear) = folder_check_interval(Some(started), now);
+        assert_eq!(interval, Duration::from_secs(1));
+        assert!(!clear);
+    }
+
+    #[test]
+    fn folder_check_interval_after_wait_expired() {
+        let started = Instant::now() - Duration::from_secs(SYNC_COMMAND_WAIT_SECS + 1);
+        let (interval, clear) = folder_check_interval(Some(started), Instant::now());
+        assert_eq!(interval, Duration::from_secs(30));
+        assert!(clear);
+    }
+
+    #[test]
+    fn format_tooltip_empty_shows_version() {
+        let tooltip = format_tooltip("");
+        assert!(tooltip.contains(APP_NAME));
+        assert!(tooltip.contains(CURRENT_VERSION));
+    }
+
+    #[test]
+    fn format_tooltip_with_status() {
+        let tooltip = format_tooltip("Waiting for folder...");
+        assert!(tooltip.contains(APP_NAME));
+        assert!(tooltip.contains("Waiting for folder..."));
+        assert!(!tooltip.contains(CURRENT_VERSION));
+    }
+
+    #[test]
+    fn write_keep_alive_creates_file() {
+        let dir = tempfile::tempdir().unwrap();
+        write_keep_alive(dir.path(), "testhost");
+        let expected = dir.path().join(format!("testhost{IS_RECEIVING_FILE_SUFFIX}"));
+        assert!(expected.exists());
+        let content = std::fs::read_to_string(&expected).unwrap();
+        // Content should be a numeric timestamp
+        assert!(content.parse::<u64>().is_ok());
+    }
 }
 
 /// Spawn always-running periodic async tasks that send events to the main event loop.
