@@ -37,11 +37,11 @@ pub(crate) fn save_state_to(
 
     if let Err(e) = fs::rename(&tmp_path, path) {
         let _ = fs::remove_file(&tmp_path);
-        return Err(anyhow::anyhow!(e).context(format!(
-            "failed to rename temporary state file '{}' to '{}'",
+        anyhow::bail!(
+            "failed to rename temporary state file '{}' to '{}': {e}",
             tmp_path.display(),
             path.display()
-        )));
+        );
     }
 
     Ok(())
@@ -56,8 +56,7 @@ pub(crate) fn load_state_from(path: &std::path::Path) -> anyhow::Result<Persiste
             return Ok(PersistentState::default());
         }
         Err(e) => {
-            return Err(anyhow::anyhow!(e))
-                .with_context(|| format!("failed to read state file '{}'", path.display()));
+            anyhow::bail!("failed to read state file '{}': {e}", path.display());
         }
     };
 
