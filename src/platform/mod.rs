@@ -8,7 +8,7 @@ pub enum NotificationDuration {
 mod windows;
 
 #[cfg(target_os = "windows")]
-pub use self::windows::*;
+pub use self::windows::{init_platform, is_directory_writable, restart_onedrive};
 
 #[cfg(not(target_os = "windows"))]
 pub fn init_platform(_executable_directory: &std::path::Path) -> anyhow::Result<()> {

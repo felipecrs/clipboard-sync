@@ -3,6 +3,11 @@ name = "clipboard-sync"
 version = "0.0.0-development"
 edition = "2024"
 build = "build.rs"
+description = "Sync clipboard content across computers via a shared folder"
+repository = "https://github.com/felipecrs/clipboard-sync"
+license = "MIT"
+keywords = ["clipboard", "sync", "tray"]
+categories = ["command-line-utilities"]
 
 [package.metadata.winresource]
 FileDescription = "Clipboard Sync"

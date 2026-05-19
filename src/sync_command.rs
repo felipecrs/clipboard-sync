@@ -119,3 +119,83 @@ impl Drop for SyncCommand {
         self.stop();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_has_no_child() {
+        let cmd = SyncCommand::new();
+        assert!(cmd.child.is_none());
+    }
+
+    #[test]
+    fn start_empty_command_returns_false() {
+        let mut cmd = SyncCommand::new();
+        assert!(!cmd.start(""));
+    }
+
+    #[test]
+    fn start_valid_command_returns_true() {
+        let mut cmd = SyncCommand::new();
+        // Use a command that exists on all platforms
+        #[cfg(target_os = "windows")]
+        let result = cmd.start("cmd /c echo hello");
+        #[cfg(not(target_os = "windows"))]
+        let result = cmd.start("echo hello");
+        assert!(result);
+        assert!(cmd.child.is_some());
+        cmd.stop();
+    }
+
+    #[test]
+    fn start_while_running_returns_false() {
+        let mut cmd = SyncCommand::new();
+        #[cfg(target_os = "windows")]
+        {
+            cmd.start("cmd /c ping -n 10 127.0.0.1");
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            cmd.start("sleep 10");
+        }
+        // Second start should return false (already running)
+        assert!(!cmd.start("echo second"));
+        cmd.stop();
+    }
+
+    #[test]
+    fn stop_when_not_running_is_noop() {
+        let mut cmd = SyncCommand::new();
+        cmd.stop(); // should not panic
+        assert!(cmd.child.is_none());
+    }
+
+    #[test]
+    fn check_returns_none_when_not_running() {
+        let mut cmd = SyncCommand::new();
+        assert!(cmd.check().is_none());
+    }
+
+    #[test]
+    fn check_detects_exited_process() {
+        let mut cmd = SyncCommand::new();
+        #[cfg(target_os = "windows")]
+        cmd.start("cmd /c echo done");
+        #[cfg(not(target_os = "windows"))]
+        cmd.start("echo done");
+
+        // Give the process a moment to finish
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        let status = cmd.check();
+        assert!(status.is_some());
+        assert!(cmd.child.is_none()); // cleared after exit detected
+    }
+
+    #[test]
+    fn start_invalid_command_returns_false() {
+        let mut cmd = SyncCommand::new();
+        assert!(!cmd.start("nonexistent_binary_xyz_12345"));
+    }
+}

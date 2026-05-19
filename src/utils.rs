@@ -108,3 +108,118 @@ pub fn open_path(path: &std::path::Path) -> anyhow::Result<()> {
 pub fn open_url(url: &str) -> anyhow::Result<()> {
     open::that_detached(url).context("failed to open URL")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn get_hostname_returns_non_empty() {
+        let hostname = get_hostname();
+        assert!(!hostname.is_empty());
+        assert!(!hostname.contains('.'), "should strip domain suffix");
+    }
+
+    #[test]
+    fn calculate_sha256_known_value() {
+        // SHA-256 of empty input
+        let hash = calculate_sha256(b"");
+        assert_eq!(
+            hash,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+    }
+
+    #[test]
+    fn calculate_sha256_different_inputs_differ() {
+        let h1 = calculate_sha256(b"hello");
+        let h2 = calculate_sha256(b"world");
+        assert_ne!(h1, h2);
+    }
+
+    #[test]
+    fn get_total_number_of_files_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = vec![dir.path().to_path_buf()];
+        assert_eq!(get_total_number_of_files(&paths), 0);
+    }
+
+    #[test]
+    fn get_total_number_of_files_counts_correctly() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.txt"), "a").unwrap();
+        std::fs::write(dir.path().join("b.txt"), "b").unwrap();
+        let sub = dir.path().join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(sub.join("c.txt"), "c").unwrap();
+        let paths = vec![dir.path().to_path_buf()];
+        assert_eq!(get_total_number_of_files(&paths), 3);
+    }
+
+    #[test]
+    fn get_files_size_mb_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = vec![dir.path().to_path_buf()];
+        assert!((get_files_size_mb(&paths) - 0.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn get_files_size_mb_nonzero() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("data.bin"), vec![0u8; 1024]).unwrap();
+        let paths = vec![dir.path().to_path_buf()];
+        let size = get_files_size_mb(&paths);
+        assert!(size > 0.0);
+        assert!(size < 0.01); // 1KB < 0.01 MB
+    }
+
+    #[test]
+    fn copy_folder_recursive_copies_all() {
+        let src = tempfile::tempdir().unwrap();
+        std::fs::write(src.path().join("file.txt"), "content").unwrap();
+        let sub = src.path().join("nested");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(sub.join("inner.txt"), "inner").unwrap();
+
+        let dst = tempfile::tempdir().unwrap();
+        let dst_path = dst.path().join("copy");
+        copy_folder_recursive(src.path(), &dst_path).unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(dst_path.join("file.txt")).unwrap(),
+            "content"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dst_path.join("nested").join("inner.txt")).unwrap(),
+            "inner"
+        );
+    }
+
+    #[test]
+    fn delete_file_or_folder_removes_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("to_delete.txt");
+        std::fs::write(&path, "bye").unwrap();
+        assert!(path.exists());
+        delete_file_or_folder(&path);
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn delete_file_or_folder_removes_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("subdir");
+        std::fs::create_dir(&sub).unwrap();
+        std::fs::write(sub.join("file.txt"), "data").unwrap();
+        assert!(sub.exists());
+        delete_file_or_folder(&sub);
+        assert!(!sub.exists());
+    }
+
+    #[test]
+    fn delete_file_or_folder_nonexistent_noop() {
+        let path = Path::new("/tmp/nonexistent_desloppify_test_file");
+        delete_file_or_folder(path); // should not panic
+    }
+}
