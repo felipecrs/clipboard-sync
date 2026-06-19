@@ -58,7 +58,7 @@ jobs:
       - run: npm ci
       - run: npm version --no-git-tag-version "${{ github.ref_name }}"
       - run: npm run make
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           make_latest: true
           files: |
