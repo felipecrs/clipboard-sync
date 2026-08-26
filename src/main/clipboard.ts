@@ -91,10 +91,10 @@ export function isIsReceivingFile(file: string): boolean {
   return file.endsWith(isReceivingFileNameSuffix);
 }
 
-export async function noComputersReceiving(
+export async function getComputersReceivingCount(
   syncFolder: string,
-  now: number,
-): Promise<boolean> {
+  now: number = Date.now(),
+): Promise<number> {
   const directoryMembers = await fs.readdir(syncFolder);
   const computersReceiving = directoryMembers.filter(
     (file) => isIsReceivingFile(file) && file !== hostNameIsReceivingFileName,
@@ -103,14 +103,27 @@ export async function noComputersReceiving(
   // This file will be renewed on every 4 minutes, this will conside stale
   // any files older than 10 minutes
   const tenMinutesAgo = now - 600_000;
+  let computersReceivingCount = 0;
   for (const computerReceiving of computersReceiving) {
-    const fileStat = await fs.stat(path.join(syncFolder, computerReceiving));
+    let fileStat;
+    try {
+      fileStat = await fs.stat(path.join(syncFolder, computerReceiving));
+    } catch {
+      continue;
+    }
     if (fileStat.ctimeMs >= tenMinutesAgo) {
-      return false;
+      computersReceivingCount++;
     }
   }
 
-  return true;
+  return computersReceivingCount;
+}
+
+export async function noComputersReceiving(
+  syncFolder: string,
+  now: number,
+): Promise<boolean> {
+  return (await getComputersReceivingCount(syncFolder, now)) === 0;
 }
 
 // Unsyncs from-others files older than 1 minute,

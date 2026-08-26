@@ -48,6 +48,7 @@ import {
   ClipboardType,
   ParsedClipboardFileName,
   cleanFiles,
+  getComputersReceivingCount,
   isClipboardTextEmpty,
   isClipboardTextEquals,
   noComputersReceiving,
@@ -138,6 +139,29 @@ let idleDetectorTask: cron.ScheduledTask;
 let iconWaiter: NodeJS.Timeout;
 
 let lastClipboardEvent: number;
+
+function getTrayTooltip(computersReceivingCount: number): string {
+  const computersText =
+    computersReceivingCount === 1
+      ? "1 computer"
+      : `${computersReceivingCount} computers`;
+  return `${app.name} - ${computersText} receiving`;
+}
+
+async function updateTrayTooltip(): Promise<void> {
+  if (!appIcon) {
+    return;
+  }
+  let computersReceivingCount = 0;
+  if (syncFolder) {
+    try {
+      computersReceivingCount = await getComputersReceivingCount(syncFolder);
+    } catch (error) {
+      log.warn(`Could not get computers receiving count:\n${error}`);
+    }
+  }
+  appIcon.setToolTip(getTrayTooltip(computersReceivingCount));
+}
 
 async function writeClipboardToFile(): Promise<void> {
   const beat = Date.now();
@@ -1048,7 +1072,8 @@ async function createAppIcon(): Promise<void> {
     appIcon = new Tray(getTrayIcon("working"));
   }
   setContextMenu();
-  appIcon.setToolTip(`${app.name} v${app.getVersion()}`);
+  trayTooltipTask = cron.schedule("*/1 * * * *", updateTrayTooltip);
+  await updateTrayTooltip();
 
   // sets left click to open the context menu too
   appIcon.on("click", () => {
@@ -1060,6 +1085,7 @@ async function createAppIcon(): Promise<void> {
   });
 
   await initialize();
+  await updateTrayTooltip();
 
   if (process.platform !== "linux") {
     await autoCheckForUpdates();
@@ -1075,6 +1101,10 @@ let cleanupBeforeQuitDone = false;
 async function cleanupBeforeQuit(): Promise<void> {
   if (cleanupBeforeQuitDone) {
     return;
+  }
+  if (trayTooltipTask) {
+    trayTooltipTask.stop();
+    trayTooltipTask = undefined;
   }
   await unInitialize();
   cleanupBeforeQuitDone = true;
