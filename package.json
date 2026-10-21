@@ -24,7 +24,7 @@
   "repository": "https://github.com/felipecrs/clipboard-sync.git",
   "dependencies": {
     "@crosscopy/clipboard": "^0.3.6",
-    "chokidar": "^5.0.0",
+    "chokidar": "^6.0.0",
     "electron-log": "^5.4.4",
     "electron-squirrel-startup": "^1.0.1",
     "electron-store": "^11.0.2",
