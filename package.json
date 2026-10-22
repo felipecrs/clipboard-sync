@@ -27,7 +27,7 @@
     "chokidar": "^5.0.0",
     "electron-log": "^5.4.4",
     "electron-squirrel-startup": "^1.0.1",
-    "electron-store": "^11.0.2",
+    "electron-store": "^12.0.0",
     "follow-redirects": "^1.16.0",
     "fswin": "^3.25.1108",
     "node-cron": "^4.2.1",
